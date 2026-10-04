@@ -1,6 +1,6 @@
-"""设置窗口（QWidget 版，WorkBuddy 风格）。
+"""设置窗口（QWidget 版，现代 SaaS 极简风）。
 
-左导航 220px + 右侧滚动卡片区。数据全部来自 SettingsModel。
+左导航 180px + 右侧内容区（限宽 800px 居中）。数据全部来自 SettingsModel。
 """
 
 from PySide6.QtCore import Qt
@@ -25,6 +25,15 @@ from context_pilot.ui.settings_model import SettingsModel
 from context_pilot.ui.settings_style import QSS
 from context_pilot.ui.widgets import ArrowComboBox, Card, HotkeyEdit, ToggleSwitch
 
+# 导航图标占位符（无资源时用 2 字符方块）；右侧留 16px 图标位
+_NAV_ITEMS = (
+    ("通用", "⚙"),
+    ("模型", "\U0001F5A5"),
+    ("快捷键", "⌨"),
+    ("记忆", "\U0001F4CB"),
+    ("行为", "⚛"),
+)
+
 
 class SettingsWindow(QWidget):
     """设置主窗口。"""
@@ -34,7 +43,7 @@ class SettingsWindow(QWidget):
         self._model = model
         self.setObjectName("SettingsWindow")
         self.setWindowTitle("ContextPilot 设置")
-        self.resize(860, 600)
+        self.resize(900, 640)
         self.setStyleSheet(QSS)
 
         root = QHBoxLayout(self)
@@ -54,8 +63,8 @@ class SettingsWindow(QWidget):
         nav.setFrameShape(QFrame.Shape.NoFrame)
         nav.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         nav.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        for label in ("通用", "模型", "快捷键", "记忆", "行为"):
-            item = QListWidgetItem(label)
+        for label, icon in _NAV_ITEMS:
+            item = QListWidgetItem(f"{icon}  {label}")
             item.setSizeHint(item.sizeHint())
             nav.addItem(item)
         nav.setCurrentRow(0)  # 初始选中第一项
@@ -82,18 +91,30 @@ class SettingsWindow(QWidget):
         page = QScrollArea()
         page.setWidgetResizable(True)
         page.setFrameShape(QFrame.Shape.NoFrame)
-        page.setStyleSheet("QScrollArea { background: #F9FAFB; }")
+        page.setStyleSheet("QScrollArea { background: #F9FAFB; border: none; }")
+
+        # 外层容器负责水平居中；内层固定最大宽度 800px
+        outer = QWidget()
+        outer.setObjectName("ContentCenter")
+        outer_layout = QHBoxLayout(outer)
+        outer_layout.setContentsMargins(24, 0, 24, 0)
 
         container = QWidget()
-        container.setObjectName("SettingsRoot")
+        container.setObjectName("ContentColumn")
+        container.setFixedWidth(800)
+        outer_layout.addWidget(container, 0, Qt.AlignmentFlag.AlignHCenter)
+        outer_layout.addStretch(1)
+
         layout = QVBoxLayout(container)
-        layout.setContentsMargins(28, 24, 28, 24)
+        layout.setContentsMargins(0, 24, 0, 24)
         layout.setSpacing(16)
 
         page_title = QLabel(title)
         page_title.setObjectName("PageTitle")
         layout.addWidget(page_title)
-        return page, container, layout
+        page.setWidget(outer)
+        # 返回 (page, layout)：page 已完成布局，调用方只往里加内容
+        return page, layout
 
     @staticmethod
     def _card_row(card_layout: QVBoxLayout, title: str, desc: str, widget: QWidget) -> None:
@@ -124,14 +145,12 @@ class SettingsWindow(QWidget):
 
     # ---------- 各页 ----------
     def _page_general(self) -> QScrollArea:
-        page, container, layout = self._scroll_page("常规")
+        page, layout = self._scroll_page("常规")
 
         card, card_layout = self._add_card(layout)
         self._card_row(card_layout, "项目根目录", "被增强的项目；留空则用启动时的工作目录", self._project_root_input())
         self._card_row(card_layout, "目标 Agent", "增强结果通过剪贴板发送到所选 Agent", self._agent_combo())
 
-        container.setLayout(layout)
-        page.setWidget(container)
         return page
 
     def _project_root_input(self) -> QLineEdit:
@@ -148,7 +167,7 @@ class SettingsWindow(QWidget):
         return combo
 
     def _page_model(self) -> QScrollArea:
-        page, container, layout = self._scroll_page("模型")
+        page, layout = self._scroll_page("模型")
 
         card, card_layout = self._add_card(layout)
         self._card_row(card_layout, "提供方", "stub 不联网，仅用于离线验证链路", self._provider_combo())
@@ -157,8 +176,6 @@ class SettingsWindow(QWidget):
         self._card_row(card_layout, "模型名", "如 deepseek-chat / gpt-4o-mini", self._text_input("model", ""))
         self._card_row(card_layout, "超时（秒）", "请求 LLM 的最长等待时间", self._spin_input("timeout", 5, 600, 5))
 
-        container.setLayout(layout)
-        page.setWidget(container)
         return page
 
     def _provider_combo(self) -> QComboBox:
@@ -185,19 +202,17 @@ class SettingsWindow(QWidget):
         return spin
 
     def _page_hotkey(self) -> QScrollArea:
-        page, container, layout = self._scroll_page("快捷键")
+        page, layout = self._scroll_page("快捷键")
 
         card, card_layout = self._add_card(layout)
         hotkey_edit = HotkeyEdit(self._model.hotkey)
         hotkey_edit.captured.connect(lambda seq: setattr(self._model, "hotkey", seq))
         self._card_row(card_layout, "全局热键", "点击输入框后按下组合键；Esc 取消", hotkey_edit)
 
-        container.setLayout(layout)
-        page.setWidget(container)
         return page
 
     def _page_memory(self) -> QScrollArea:
-        page, container, layout = self._scroll_page("记忆")
+        page, layout = self._scroll_page("记忆")
 
         card, card_layout = self._add_card(layout)
         toggle = ToggleSwitch()
@@ -224,15 +239,13 @@ class SettingsWindow(QWidget):
             empty.setObjectName("Desc")
             list_card_layout.addWidget(empty)
 
-        container.setLayout(layout)
-        page.setWidget(container)
         return page
 
     def _delete_memory(self, memory_id: str) -> None:
         self._model.deleteMemory(memory_id)
 
     def _page_behavior(self) -> QScrollArea:
-        page, container, layout = self._scroll_page("行为")
+        page, layout = self._scroll_page("行为")
 
         card, card_layout = self._add_card(layout)
         self._card_row(
@@ -248,8 +261,6 @@ class SettingsWindow(QWidget):
             self._toggle("closeToTray"),
         )
 
-        container.setLayout(layout)
-        page.setWidget(container)
         return page
 
     def _toggle(self, prop: str) -> ToggleSwitch:

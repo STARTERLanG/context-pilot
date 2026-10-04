@@ -41,7 +41,7 @@ class ToggleSwitch(QAbstractButton):
         width, height = self.width(), self.height()
 
         on = self.isChecked()
-        track_color = QColor("#14B8A6") if on else QColor("#E5E7EB")
+        track_color = QColor("#3B82F6") if on else QColor("#E5E7EB")
         painter.setPen(Qt.PenStyle.NoPen)
         painter.setBrush(track_color)
         painter.drawRoundedRect(0, 0, width, height, height // 2, height // 2)
@@ -64,7 +64,7 @@ class ArrowComboBox(QComboBox):
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
-        self.setFixedHeight(32)
+        self.setFixedHeight(36)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
 
     def paintEvent(self, event) -> None:
@@ -93,7 +93,7 @@ class HotkeyEdit(QLineEdit):
         super().__init__(parent)
         self._capturing = False
         self._value = value
-        self.setFixedHeight(32)
+        self.setFixedHeight(36)
         self.setReadOnly(True)
         self.setPlaceholderText("点击后按下组合键")
         self.refresh_text()

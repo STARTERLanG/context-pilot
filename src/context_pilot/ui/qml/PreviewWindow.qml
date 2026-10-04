@@ -283,7 +283,7 @@ Rectangle {
                 + " · 上下文 " + preview.tokenStats.context
                 + " · 增强 " + preview.tokenStats.enhanced
                 + " · 合计 " + preview.tokenStats.total
-            color: theme.textMuted
+            color: "#9CA3AF"  // 浅灰，融入背景
             font.family: theme.fontFamily
             font.pixelSize: theme.fontCaption
         }
