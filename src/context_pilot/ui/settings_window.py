@@ -50,7 +50,7 @@ class SettingsWindow(QWidget):
     def _build_nav(self) -> QListWidget:
         nav = QListWidget()
         nav.setObjectName("NavList")
-        nav.setFixedWidth(220)
+        nav.setFixedWidth(180)
         nav.setFrameShape(QFrame.Shape.NoFrame)
         nav.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         nav.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
@@ -58,11 +58,12 @@ class SettingsWindow(QWidget):
             item = QListWidgetItem(label)
             item.setSizeHint(item.sizeHint())
             nav.addItem(item)
+        nav.setCurrentRow(0)  # 初始选中第一项
         self._nav = nav
         return nav
 
     def _switch_page(self, item: QListWidgetItem) -> None:
-        self._pages.setCurrentRow(self._nav.row(item))
+        self._pages.setCurrentIndex(self._nav.row(item))
 
     # ---------- 右侧内容 ----------
     def _build_pages(self) -> QStackedWidget:

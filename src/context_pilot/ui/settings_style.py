@@ -49,16 +49,17 @@ QSS = """
 #Card QLabel#Title {
     color: #111827;
     font-size: 14px;
-    font-weight: 600;
+    font-weight: 700;
 }
 #Card QLabel#Desc {
     color: #6B7280;
     font-size: 12px;
+    font-weight: 600;
 }
 #PageTitle {
     color: #111827;
     font-size: 20px;
-    font-weight: 600;
+    font-weight: 700;
 }
 
 /* ---------- 输入框 ---------- */
