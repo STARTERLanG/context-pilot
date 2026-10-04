@@ -290,6 +290,99 @@ Rectangle {
                 }
             }
 
+            // 从对话抽取
+            FieldLabel { text: "从对话抽取记忆" }
+            AppTextArea {
+                id: draftArea
+                Layout.fillWidth: true
+                Layout.preferredHeight: 90
+                text: settings.draftText
+                onTextChanged: settings.draftText = text
+            }
+            RowLayout {
+                Layout.fillWidth: true
+                AppButton {
+                    text: "抽取候选"
+                    variant: "secondary"
+                    onClicked: settings.extractFromDraft()
+                }
+                Text {
+                    text: settings.candidates.length === 0
+                          ? "粘贴一段对话/结论，点「抽取候选」"
+                          : "以下候选需逐条确认后入库"
+                    color: theme.textMuted
+                    font.family: theme.fontFamily
+                    font.pixelSize: theme.fontCaption
+                    Layout.fillWidth: true
+                }
+            }
+
+            // 候选列表
+            ListView {
+                Layout.fillWidth: true
+                Layout.preferredHeight: Math.min(160, settings.candidates.length * 64 + 8)
+                visible: settings.candidates.length > 0
+                clip: true
+                model: settings.candidates
+                spacing: theme.spaceSm
+                delegate: Rectangle {
+                    required property int index
+                    required property var modelData
+                    width: ListView.view.width
+                    height: 58
+                    radius: theme.radiusMd
+                    color: theme.surface
+                    border.width: 1
+                    border.color: theme.border
+
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.margins: theme.spaceMd
+                        spacing: theme.spaceMd
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            spacing: 2
+                            Text {
+                                text: modelData.type
+                                color: theme.accent
+                                font.family: theme.fontFamily
+                                font.pixelSize: theme.fontCaption
+                                font.weight: Font.DemiBold
+                            }
+                            Text {
+                                text: modelData.content
+                                color: theme.textPrimary
+                                font.family: theme.fontFamily
+                                font.pixelSize: theme.fontBody
+                                elide: Text.ElideRight
+                                Layout.fillWidth: true
+                            }
+                            Text {
+                                text: settings.candidateConflict(index) !== ""
+                                      ? "⚠ 与已有记忆相似：" + settings.candidateConflict(index)
+                                      : ""
+                                visible: settings.candidateConflict(index) !== ""
+                                color: theme.warning
+                                font.family: theme.fontFamily
+                                font.pixelSize: 10
+                                elide: Text.ElideRight
+                                Layout.fillWidth: true
+                            }
+                        }
+                        AppButton {
+                            text: "拒绝"
+                            variant: "ghost"
+                            onClicked: settings.discardCandidate(index)
+                        }
+                        AppButton {
+                            text: "确认"
+                            variant: "primary"
+                            onClicked: settings.acceptCandidate(index)
+                        }
+                    }
+                }
+            }
+
             ListView {
                 Layout.fillWidth: true
                 Layout.fillHeight: true

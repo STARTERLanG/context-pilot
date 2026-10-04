@@ -8,6 +8,8 @@ from dataclasses import replace
 from PySide6.QtCore import Property, QObject, Signal, Slot
 
 from context_pilot.config import Config, LlmConfig, load as load_config, save as save_config
+from context_pilot.memory.extractor import extract as extract_candidates
+from context_pilot.memory.extractor import find_conflicts
 from context_pilot.memory.models import MemoryType
 from context_pilot.memory.store import MemoryStore
 from context_pilot.platform import autostart
@@ -52,6 +54,7 @@ class SettingsModel(QObject):
     saveFailed = Signal(str)
     hotkeyChanged = Signal(str)
     memoriesChanged = Signal()
+    candidatesChanged = Signal()
     autostartFailed = Signal(str)
 
     def __init__(self, project_root, parent: QObject | None = None) -> None:
@@ -63,6 +66,8 @@ class SettingsModel(QObject):
             self._store = MemoryStore(project_root)
         except OSError:
             self._store = None
+        self._pending_candidates: list = []
+        self._draft_text = ""
 
     # ---- 通用 ----
     def _get_project_root(self) -> str:
@@ -169,6 +174,22 @@ class SettingsModel(QObject):
 
     memoryEnabled = Property(bool, _get_memory_enabled, _set_memory_enabled)
 
+    def _get_candidates(self) -> list[dict]:
+        return [
+            {"type": _MEMORY_TYPE_LABELS.get(c.type, c.type.value), "content": c.content}
+            for c in self._pending_candidates
+        ]
+
+    candidates = Property("QVariantList", _get_candidates, notify=candidatesChanged)
+
+    def _get_draft_text(self) -> str:
+        return self._draft_text
+
+    def _set_draft_text(self, value: str) -> None:
+        self._draft_text = value
+
+    draftText = Property(str, _get_draft_text, _set_draft_text)
+
     def _get_memories(self) -> list[dict]:
         if self._store is None:
             return []
@@ -274,6 +295,44 @@ class SettingsModel(QObject):
     @Slot()
     def reloadMemories(self) -> None:
         self.memoriesChanged.emit()
+
+    @Slot()
+    def extractFromDraft(self) -> None:
+        """从草稿文本抽取候选记忆，等待用户逐条确认。"""
+        self._pending_candidates = extract_candidates(self._draft_text)
+        self.candidatesChanged.emit()
+
+    @Slot(int, result=bool)
+    def acceptCandidate(self, index: int) -> bool:
+        """确认并入库一条候选记忆。"""
+        if self._store is None:
+            return False
+        if not (0 <= index < len(self._pending_candidates)):
+            return False
+        candidate = self._pending_candidates[index]
+        self._store.add(candidate.content, candidate.type, source="conversation", confidence=0.8)
+        self._pending_candidates.pop(index)
+        self.candidatesChanged.emit()
+        self.memoriesChanged.emit()
+        return True
+
+    @Slot(int)
+    def discardCandidate(self, index: int) -> None:
+        if 0 <= index < len(self._pending_candidates):
+            self._pending_candidates.pop(index)
+            self.candidatesChanged.emit()
+
+    @Slot(int, result=str)
+    def candidateConflict(self, index: int) -> str:
+        """返回候选记忆与已有记忆的冲突提示；无冲突返回空串。"""
+        if self._store is None:
+            return ""
+        if not (0 <= index < len(self._pending_candidates)):
+            return ""
+        candidate = self._pending_candidates[index]
+        existing = [m.content for m in self._store.list()]
+        conflicts = find_conflicts(existing, candidate.content)
+        return "；".join(conflicts) if conflicts else ""
 
 
 def _replace_general(config: Config, **kw) -> Config:
