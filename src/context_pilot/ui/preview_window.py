@@ -6,15 +6,12 @@
 
 import ctypes
 from collections.abc import Callable
-from pathlib import Path
 
-from PySide6.QtCore import QUrl
 from PySide6.QtGui import QColor
 from PySide6.QtQuick import QQuickView
 
+from context_pilot.ui import qml_setup
 from context_pilot.ui.preview_model import PreviewModel
-
-_QML_PATH = Path(__file__).parent / "qml" / "PreviewWindow.qml"
 
 
 class PreviewWindow:
@@ -24,16 +21,14 @@ class PreviewWindow:
         self._on_close = on_close
         self._view = QQuickView()
         self._view.setTitle("ContextPilot")
-        self._view.setColor(QColor("#17181b"))
+        self._view.setColor(QColor("#0E0F12"))
         self._view.setResizeMode(QQuickView.ResizeMode.SizeViewToRootObject)
 
-        # 必须在 setSource 之前注入，否则 QML 里取不到
+        # 注入顺序：先配置引擎与上下文属性，再 setSource
+        qml_setup.configure(self._view)
         self._view.rootContext().setContextProperty("preview", model)
-        self._view.setSource(QUrl.fromLocalFile(str(_QML_PATH)))
-
-        if self._view.status() == QQuickView.Status.Error:
-            details = "\n".join(str(e) for e in self._view.errors())
-            raise RuntimeError(f"QML 加载失败：\n{details}")
+        self._view.setSource(qml_setup.source("PreviewWindow.qml"))
+        qml_setup.check(self._view, "预览窗")
 
         self._view.closing.connect(self._on_closing)
 

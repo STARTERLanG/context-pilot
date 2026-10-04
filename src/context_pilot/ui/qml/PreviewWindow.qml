@@ -1,125 +1,217 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import "components"
 
+// 预览窗：顶栏 + 原始指令 + 增强结果（主体）+ 上下文胶囊 + 底部操作栏。
 Rectangle {
     id: root
-    width: 760
-    height: 620
-    color: "#17181b"
+    width: 780
+    height: 660
+    color: theme.background
 
-    // 外层 Rectangle 是 QQuickView 的根对象，窗口关闭走 model.close()
-    // 而不是隐藏根对象，避免破坏 QQuickView 的复用。
+    // ---------- 顶栏 ----------
+    Item {
+        id: topBar
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.top: parent.top
+        anchors.leftMargin: theme.spaceXl
+        anchors.rightMargin: theme.spaceXl
+        anchors.topMargin: theme.spaceLg
+        height: 44
 
+        Row {
+            anchors.left: parent.left
+            anchors.verticalCenter: parent.verticalCenter
+            spacing: theme.spaceSm
+            Rectangle {
+                width: 26; height: 26; radius: theme.radiusSm
+                color: theme.accent
+                anchors.verticalCenter: parent.verticalCenter
+                Text {
+                    anchors.centerIn: parent
+                    text: "CP"
+                    color: theme.textInverse
+                    font.family: theme.fontFamily
+                    font.pixelSize: theme.fontSmall
+                    font.weight: Font.Bold
+                }
+            }
+            Text {
+                anchors.verticalCenter: parent.verticalCenter
+                text: "ContextPilot"
+                color: theme.textPrimary
+                font.family: theme.fontFamily
+                font.pixelSize: theme.fontSubtitle
+                font.weight: Font.DemiBold
+            }
+        }
+
+        Rectangle {
+            anchors.right: parent.right
+            anchors.verticalCenter: parent.verticalCenter
+            width: statusRow.implicitWidth + theme.spaceMd * 2
+            height: 26
+            radius: theme.radiusFull
+            color: theme.surface
+            border.width: 1
+            border.color: theme.border
+            Row {
+                id: statusRow
+                anchors.centerIn: parent
+                spacing: theme.spaceSm
+                Rectangle {
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: 7; height: 7; radius: 999
+                    color: preview.status.indexOf("失败") === 0 ? theme.danger : theme.success
+                }
+                Text {
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: preview.status
+                    color: theme.textSecondary
+                    font.family: theme.fontFamily
+                    font.pixelSize: theme.fontCaption
+                }
+            }
+        }
+    }
+
+    // ---------- 主体 ----------
     ColumnLayout {
-        anchors.fill: parent
-        anchors.margins: 20
-        spacing: 14
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.top: topBar.bottom
+        anchors.bottom: bottomBar.top
+        anchors.leftMargin: theme.spaceXl
+        anchors.rightMargin: theme.spaceXl
+        anchors.topMargin: theme.spaceLg
+        anchors.bottomMargin: theme.spaceLg
+        spacing: theme.spaceMd
 
+        // 原始指令
+        Text {
+            text: "原始指令"
+            color: theme.textMuted
+            font.family: theme.fontFamily
+            font.pixelSize: theme.fontCaption
+            font.weight: Font.DemiBold
+        }
+        AppCard {
+            Layout.fillWidth: true
+            Layout.preferredHeight: 62
+            padding: theme.spaceMd
+            AppTextArea {
+                anchors.fill: parent
+                text: preview.originalPrompt
+                readOnly: true
+            }
+        }
+
+        // 增强结果（占据剩余空间）
         RowLayout {
             Layout.fillWidth: true
+            spacing: theme.spaceSm
             Text {
-                text: "ContextPilot"
-                color: "#e8eaed"
-                font.pixelSize: 20
-                font.bold: true
-                Layout.fillWidth: true
+                text: "增强结果"
+                color: theme.textMuted
+                font.family: theme.fontFamily
+                font.pixelSize: theme.fontCaption
+                font.weight: Font.DemiBold
             }
             Text {
-                text: preview.status
-                color: "#8b93a1"
-                font.pixelSize: 13
+                text: "可编辑"
+                color: theme.textMuted
+                font.family: theme.fontFamily
+                font.pixelSize: theme.fontCaption
             }
+            Item { Layout.fillWidth: true }
         }
-
-        Text {
-            text: "原始 Prompt"
-            color: "#8b93a1"
-            font.pixelSize: 12
-        }
-        Rectangle {
-            Layout.fillWidth: true
-            Layout.preferredHeight: 64
-            color: "#21232a"
-            radius: 8
-            ScrollView {
-                anchors.fill: parent
-                anchors.margins: 10
-                TextArea {
-                    id: originalArea
-                    text: preview.originalPrompt
-                    color: "#c8cdd6"
-                    readOnly: true
-                    wrapMode: TextArea.Wrap
-                    background: null
-                }
-            }
-        }
-
-        Text {
-            text: "增强结果（可编辑）"
-            color: "#8b93a1"
-            font.pixelSize: 12
-        }
-        Rectangle {
+        AppTextArea {
+            id: enhancedArea
             Layout.fillWidth: true
             Layout.fillHeight: true
-            color: "#21232a"
-            radius: 8
-            ScrollView {
-                anchors.fill: parent
-                anchors.margins: 10
-                TextArea {
-                    id: enhancedArea
-                    text: preview.enhancedPrompt
-                    color: "#e8eaed"
-                    wrapMode: TextArea.Wrap
-                    selectByMouse: true
-                    background: null
-                }
-            }
+            text: preview.enhancedPrompt
         }
 
-        Text {
-            text: "上下文"
-            color: "#8b93a1"
-            font.pixelSize: 12
-        }
-        Rectangle {
+        // 上下文
+        RowLayout {
             Layout.fillWidth: true
-            Layout.preferredHeight: contextColumn.implicitHeight + 20
-            color: "#21232a"
-            radius: 8
-            Column {
-                id: contextColumn
-                anchors.left: parent.left
-                anchors.right: parent.right
-                anchors.verticalCenter: parent.verticalCenter
-                anchors.margins: 10
-                spacing: 4
-                Repeater {
-                    model: preview.contextFiles
+            Layout.topMargin: theme.spaceXs
+            spacing: theme.spaceSm
+            Text {
+                text: "上下文"
+                color: theme.textMuted
+                font.family: theme.fontFamily
+                font.pixelSize: theme.fontCaption
+                font.weight: Font.DemiBold
+            }
+            Text {
+                text: preview.contextFiles.length === 0 ? "无" : preview.contextFiles.length + " 项"
+                color: theme.textMuted
+                font.family: theme.fontFamily
+                font.pixelSize: theme.fontCaption
+            }
+        }
+        Flow {
+            Layout.fillWidth: true
+            spacing: theme.spaceSm
+            visible: preview.contextFiles.length > 0
+            Repeater {
+                model: preview.contextFiles
+                delegate: Rectangle {
+                    required property string modelData
+                    height: 26
+                    width: chipLabel.implicitWidth + theme.spaceMd * 2
+                    radius: theme.radiusFull
+                    color: theme.surface
+                    border.width: 1
+                    border.color: theme.border
                     Text {
-                        required property string modelData
-                        text: "· " + modelData
-                        color: "#9aa3b2"
-                        font.pixelSize: 12
+                        id: chipLabel
+                        anchors.centerIn: parent
+                        text: modelData
+                        color: theme.textSecondary
+                        font.family: theme.fontFamily
+                        font.pixelSize: theme.fontCaption
                     }
                 }
             }
         }
+    }
 
-        RowLayout {
-            Layout.fillWidth: true
-            spacing: 10
-            Item { Layout.fillWidth: true }
-            Button {
+    // ---------- 底部操作栏 ----------
+    Item {
+        id: bottomBar
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.bottom: parent.bottom
+        anchors.leftMargin: theme.spaceXl
+        anchors.rightMargin: theme.spaceXl
+        anchors.bottomMargin: theme.spaceLg
+        height: 40
+
+        Text {
+            anchors.left: parent.left
+            anchors.verticalCenter: parent.verticalCenter
+            text: "Esc 关闭    Enter 使用"
+            color: theme.textMuted
+            font.family: theme.fontFamily
+            font.pixelSize: theme.fontCaption
+        }
+
+        Row {
+            anchors.right: parent.right
+            anchors.verticalCenter: parent.verticalCenter
+            spacing: theme.spaceSm
+            AppButton {
                 text: "取消"
+                variant: "ghost"
                 onClicked: preview.close()
             }
-            Button {
+            AppButton {
                 text: "使用增强 Prompt"
-                highlighted: true
+                variant: "primary"
                 onClicked: preview.use(enhancedArea.text)
             }
         }
