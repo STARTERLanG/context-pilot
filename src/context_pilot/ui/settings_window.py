@@ -1,6 +1,10 @@
-"""设置窗口（QWidget 版，现代 SaaS 极简风）。
+"""设置窗口（QWidget 版，严格三层结构）。
 
-左导航 180px + 右侧内容区（限宽 800px 居中）。数据全部来自 SettingsModel。
+第一层：窗口全局背景 #F9FAFB，主布局 QHBoxLayout（左导航 + 右内容）。
+第二层：右侧 QScrollArea(widgetResizable=True) 内一个容器，其布局
+        顶部/底部各 addStretch(1)，中间内容 setFixedWidth(700) 保证整齐。
+第三层：卡片（QFrame objectName=Card）内 QVBoxLayout，
+        表单行 QHBoxLayout = 左标题+说明 + 弹簧 + 右开关。
 """
 
 from PySide6.QtCore import Qt
@@ -14,8 +18,6 @@ from PySide6.QtWidgets import (
     QListWidgetItem,
     QPushButton,
     QScrollArea,
-    QSizePolicy,
-    QSlider,
     QSpinBox,
     QStackedWidget,
     QVBoxLayout,
@@ -26,7 +28,6 @@ from context_pilot.ui.settings_model import SettingsModel
 from context_pilot.ui.settings_style import QSS
 from context_pilot.ui.widgets import ArrowComboBox, Card, HotkeyEdit, ToggleSwitch
 
-# 导航图标占位符（无资源时用 2 字符方块）；右侧留 16px 图标位
 _NAV_ITEMS = (
     ("通用", "⚙"),
     ("模型", "\U0001F5A5"),
@@ -44,16 +45,15 @@ class SettingsWindow(QWidget):
         self._model = model
         self.setObjectName("SettingsWindow")
         self.setWindowTitle("ContextPilot 设置")
-        self.resize(900, 640)
+        self.resize(980, 640)
         self.setStyleSheet(QSS)
 
+        # 第一层：主布局（左导航 + 右内容）
         root = QHBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
-
         root.addWidget(self._build_nav())
         root.addWidget(self._build_pages(), 1)
-
         self._nav.itemClicked.connect(self._switch_page)
 
     # ---------- 左导航 ----------
@@ -68,14 +68,14 @@ class SettingsWindow(QWidget):
             item = QListWidgetItem(f"{icon}  {label}")
             item.setSizeHint(item.sizeHint())
             nav.addItem(item)
-        nav.setCurrentRow(0)  # 初始选中第一项
+        nav.setCurrentRow(0)
         self._nav = nav
         return nav
 
     def _switch_page(self, item: QListWidgetItem) -> None:
         self._pages.setCurrentIndex(self._nav.row(item))
 
-    # ---------- 右侧内容 ----------
+    # ---------- 第二层：右侧内容区 ----------
     def _build_pages(self) -> QStackedWidget:
         self._pages = QStackedWidget()
         for builder in (
@@ -88,44 +88,53 @@ class SettingsWindow(QWidget):
             self._pages.addWidget(builder())
         return self._pages
 
-    def _scroll_page(self, title: str) -> tuple[QScrollArea, QWidget, QVBoxLayout]:
-        page = QScrollArea()
-        page.setWidgetResizable(True)
-        page.setFrameShape(QFrame.Shape.NoFrame)
-        # 必须 AsNeeded：AlwaysOff 会冻结 widget 宽度，导致响应式失效
-        page.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
-        page.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
-        page.setStyleSheet("QScrollArea { background: #F9FAFB; border: none; }")
+    def _page(self, title: str) -> tuple[QScrollArea, QVBoxLayout]:
+        """返回 (scroll, 内容布局)：已含顶/底弹簧 + 固定 700px 内容列。"""
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll.setStyleSheet("QScrollArea { background: #F9FAFB; border: none; }")
 
-        # 外层容器负责水平居中；内层自适应拉伸，最大宽度 800px。
-        # 用「左弹性 + 内容 + 右弹性」三明治：内容始终居中，随窗口伸缩，到 800 封顶。
-        outer = QWidget()
-        outer.setObjectName("ContentCenter")
-        outer_layout = QHBoxLayout(outer)
-        outer_layout.setContentsMargins(24, 0, 24, 0)
-
+        # 容器：垂直布局，顶部与底部各一根弹簧
         container = QWidget()
-        container.setObjectName("ContentColumn")
-        container.setMinimumWidth(400)
-        container.setMaximumWidth(800)
-        container.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-        outer_layout.addWidget(container, 1)  # 独占弹性：随窗口伸缩，到 800 封顶
+        container_layout = QVBoxLayout(container)
+        container_layout.setContentsMargins(24, 0, 24, 40)  # 底部 40px padding
+        container_layout.addStretch(1)  # 顶部弹簧
 
-        layout = QVBoxLayout(container)
-        layout.setContentsMargins(0, 24, 0, 24)
-        layout.setSpacing(16)
+        # 中间：固定宽度 700px 的内容列
+        content = QWidget()
+        content.setFixedWidth(700)
+        content_layout = QVBoxLayout(content)
+        content_layout.setContentsMargins(0, 0, 0, 0)
+        content_layout.setSpacing(0)
 
         page_title = QLabel(title)
         page_title.setObjectName("PageTitle")
-        layout.addWidget(page_title)
-        page.setWidget(outer)
-        # 返回 (page, layout)：page 已完成布局，调用方只往里加内容
-        return page, layout
+        content_layout.addWidget(page_title)
+        content_layout.addSpacing(8)
+
+        container_layout.addWidget(content, 0, Qt.AlignmentFlag.AlignHCenter)
+        container_layout.addStretch(1)  # 底部弹簧
+
+        scroll.setWidget(container)
+        return scroll, content_layout
+
+    # ---------- 第三层：卡片与表单行 ----------
+    @staticmethod
+    def _card(content_layout: QVBoxLayout) -> QVBoxLayout:
+        """创建一张卡片（QFrame objectName=Card），返回其内部布局。"""
+        card = Card()
+        card_layout = QVBoxLayout(card)
+        card_layout.setContentsMargins(20, 20, 20, 20)
+        card_layout.setSpacing(20)
+        content_layout.addWidget(card)
+        return card_layout
 
     @staticmethod
-    def _card_row(card_layout: QVBoxLayout, title: str, desc: str, widget: QWidget) -> None:
+    def _field_row(card_layout: QVBoxLayout, title: str, desc: str, control: QWidget) -> None:
+        """一行表单：左标题+说明，弹簧，右控件推到最右。"""
         row = QHBoxLayout()
-        row.setSpacing(24)
+        row.setSpacing(16)
 
         text_col = QVBoxLayout()
         text_col.setSpacing(2)
@@ -137,28 +146,74 @@ class SettingsWindow(QWidget):
         text_col.addWidget(title_label)
         text_col.addWidget(desc_label)
 
-        row.addLayout(text_col, 1)
-        row.addWidget(widget, 0, Qt.AlignmentFlag.AlignVCenter)
-        card_layout.addLayout(row)
+        row.addLayout(text_col)
+        row.addStretch(1)  # 弹簧：把右侧控件推到最右
+        row.addWidget(control, 0, Qt.AlignmentFlag.AlignVCenter)
 
-    def _add_card(self, layout: QVBoxLayout) -> tuple[Card, QVBoxLayout]:
-        card = Card()
-        card_layout = QVBoxLayout(card)
-        card_layout.setContentsMargins(20, 20, 20, 20)
-        card_layout.setSpacing(18)
-        layout.addWidget(card)
-        return card, card_layout
+        card_layout.addLayout(row)
 
     # ---------- 各页 ----------
     def _page_general(self) -> QScrollArea:
-        page, layout = self._scroll_page("常规")
+        scroll, layout = self._page("常规")
+        card = self._card(layout)
+        self._field_row(card, "项目根目录", "被增强的项目；留空则用启动时的工作目录", self._project_root_input())
+        self._field_row(card, "目标 Agent", "增强结果通过剪贴板发送到所选 Agent", self._agent_combo())
+        return scroll
 
-        card, card_layout = self._add_card(layout)
-        self._card_row(card_layout, "项目根目录", "被增强的项目；留空则用启动时的工作目录", self._project_root_input())
-        self._card_row(card_layout, "目标 Agent", "增强结果通过剪贴板发送到所选 Agent", self._agent_combo())
+    def _page_model(self) -> QScrollArea:
+        scroll, layout = self._page("模型")
+        card = self._card(layout)
+        self._field_row(card, "提供方", "stub 不联网，仅用于离线验证链路", self._provider_combo())
+        self._field_row(card, "接口地址", "任意 OpenAI 兼容端点", self._text_input("baseUrl", "https://api.openai.com/v1"))
+        self._field_row(card, "API Key", "只保存在本机配置，不进版本库", self._text_input("apiKey", "", password=True))
+        self._field_row(card, "模型名", "如 deepseek-chat / gpt-4o-mini", self._text_input("model", ""))
+        self._field_row(card, "超时（秒）", "请求 LLM 的最长等待时间", self._spin_input("timeout", 5, 600, 5))
+        return scroll
 
-        return page
+    def _page_hotkey(self) -> QScrollArea:
+        scroll, layout = self._page("快捷键")
+        card = self._card(layout)
+        hotkey_edit = HotkeyEdit(self._model.hotkey)
+        hotkey_edit.captured.connect(lambda seq: setattr(self._model, "hotkey", seq))
+        self._field_row(card, "全局热键", "点击输入框后按下组合键；Esc 取消", hotkey_edit)
+        return scroll
 
+    def _page_memory(self) -> QScrollArea:
+        scroll, layout = self._page("记忆")
+        card = self._card(layout)
+        toggle = ToggleSwitch()
+        toggle.setChecked(self._model.memoryEnabled)
+        toggle.toggled.connect(lambda checked: setattr(self._model, "memoryEnabled", checked))
+        self._field_row(card, "启用项目记忆", "检索时把项目记忆纳入上下文", toggle)
+
+        list_card = self._card(layout)
+        for memory in self._model.memories:
+            row = QHBoxLayout()
+            row.setSpacing(12)
+            label = QLabel(f"{memory['type']} · {memory['content']}")
+            label.setObjectName("Desc")
+            label.setWordWrap(True)
+            row.addWidget(label, 1)
+            delete_btn = QPushButton("删除")
+            delete_btn.setObjectName("DangerButton")
+            delete_btn.clicked.connect(lambda _=False, mid=memory["id"]: self._delete_memory(mid))
+            row.addWidget(delete_btn, 0, Qt.AlignmentFlag.AlignVCenter)
+            list_card.addLayout(row)
+        if not self._model.memories:
+            empty = QLabel("暂无记忆")
+            empty.setObjectName("Desc")
+            list_card.addWidget(empty)
+        return scroll
+
+    def _page_behavior(self) -> QScrollArea:
+        scroll, layout = self._page("行为")
+        card = self._card(layout)
+        self._field_row(card, "开机自启", "登录 Windows 后自动驻留托盘", self._toggle("autostart"))
+        self._field_row(card, "自动写回剪贴板", "点「使用」后自动把结果写入剪贴板", self._toggle("autoCopy"))
+        self._field_row(card, "关闭最小化到托盘", "关窗不退出，仅隐藏到托盘", self._toggle("closeToTray"))
+        return scroll
+
+    # ---------- 控件工厂 ----------
     def _project_root_input(self) -> QLineEdit:
         field = QLineEdit(self._model.projectRoot)
         field.setPlaceholderText("D:/your/project")
@@ -171,18 +226,6 @@ class SettingsWindow(QWidget):
         combo.setCurrentText(self._model.agent)
         combo.currentTextChanged.connect(lambda text: setattr(self._model, "agent", text))
         return combo
-
-    def _page_model(self) -> QScrollArea:
-        page, layout = self._scroll_page("模型")
-
-        card, card_layout = self._add_card(layout)
-        self._card_row(card_layout, "提供方", "stub 不联网，仅用于离线验证链路", self._provider_combo())
-        self._card_row(card_layout, "接口地址", "任意 OpenAI 兼容端点", self._text_input("baseUrl", "https://api.openai.com/v1"))
-        self._card_row(card_layout, "API Key", "只保存在本机配置，不进版本库", self._text_input("apiKey", "", password=True))
-        self._card_row(card_layout, "模型名", "如 deepseek-chat / gpt-4o-mini", self._text_input("model", ""))
-        self._card_row(card_layout, "超时（秒）", "请求 LLM 的最长等待时间", self._spin_input("timeout", 5, 600, 5))
-
-        return page
 
     def _provider_combo(self) -> QComboBox:
         combo = ArrowComboBox()
@@ -207,73 +250,14 @@ class SettingsWindow(QWidget):
         spin.valueChanged.connect(lambda value: setattr(self._model, prop, value))
         return spin
 
-    def _page_hotkey(self) -> QScrollArea:
-        page, layout = self._scroll_page("快捷键")
-
-        card, card_layout = self._add_card(layout)
-        hotkey_edit = HotkeyEdit(self._model.hotkey)
-        hotkey_edit.captured.connect(lambda seq: setattr(self._model, "hotkey", seq))
-        self._card_row(card_layout, "全局热键", "点击输入框后按下组合键；Esc 取消", hotkey_edit)
-
-        return page
-
-    def _page_memory(self) -> QScrollArea:
-        page, layout = self._scroll_page("记忆")
-
-        card, card_layout = self._add_card(layout)
-        toggle = ToggleSwitch()
-        toggle.setChecked(self._model.memoryEnabled)
-        toggle.toggled.connect(lambda checked: setattr(self._model, "memoryEnabled", checked))
-        self._card_row(card_layout, "启用项目记忆", "检索时把项目记忆纳入上下文", toggle)
-
-        # 记忆列表（简单展示 + 删除）
-        list_card, list_card_layout = self._add_card(layout)
-        for memory in self._model.memories:
-            row = QHBoxLayout()
-            row.setSpacing(12)
-            label = QLabel(f"{memory['type']} · {memory['content']}")
-            label.setObjectName("Desc")
-            label.setWordWrap(True)
-            row.addWidget(label, 1)
-            delete_btn = QPushButton("删除")
-            delete_btn.setObjectName("DangerButton")
-            delete_btn.clicked.connect(lambda _=False, mid=memory["id"]: self._delete_memory(mid))
-            row.addWidget(delete_btn, 0, Qt.AlignmentFlag.AlignVCenter)
-            list_card_layout.addLayout(row)
-        if not self._model.memories:
-            empty = QLabel("暂无记忆")
-            empty.setObjectName("Desc")
-            list_card_layout.addWidget(empty)
-
-        return page
-
-    def _delete_memory(self, memory_id: str) -> None:
-        self._model.deleteMemory(memory_id)
-
-    def _page_behavior(self) -> QScrollArea:
-        page, layout = self._scroll_page("行为")
-
-        card, card_layout = self._add_card(layout)
-        self._card_row(
-            card_layout, "开机自启", "登录 Windows 后自动驻留托盘",
-            self._toggle("autostart"),
-        )
-        self._card_row(
-            card_layout, "自动写回剪贴板", "点「使用」后自动把结果写入剪贴板",
-            self._toggle("autoCopy"),
-        )
-        self._card_row(
-            card_layout, "关闭最小化到托盘", "关窗不退出，仅隐藏到托盘",
-            self._toggle("closeToTray"),
-        )
-
-        return page
-
     def _toggle(self, prop: str) -> ToggleSwitch:
         toggle = ToggleSwitch()
         toggle.setChecked(getattr(self._model, prop))
         toggle.toggled.connect(lambda checked: setattr(self._model, prop, checked))
         return toggle
+
+    def _delete_memory(self, memory_id: str) -> None:
+        self._model.deleteMemory(memory_id)
 
     def show_and_activate(self) -> None:
         self.show()

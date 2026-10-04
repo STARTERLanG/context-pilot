@@ -52,11 +52,22 @@ QSS = """
     background: #F9FAFB;
 }
 
+/* ---------- QScrollArea 视口 ---------- */
+QScrollArea {
+    background: #F9FAFB;
+    border: none;
+}
+QScrollArea > QWidget > QWidget {
+    background: #F9FAFB;
+}
+
 /* ---------- 卡片 ---------- */
 #Card {
     background: #FFFFFF;
     border: 1px solid #E5E7EB;
     border-radius: 12px;
+    margin-bottom: 20px;
+    padding: 20px;
 }
 #Card QLabel#Title {
     color: #111827;
@@ -155,6 +166,18 @@ QSS = """
 }
 #Card QSlider::handle:horizontal:hover {
     border-color: #3B82F6;
+}
+
+/* ---------- 开关（ToggleSwitch 手绘，不受 QSS 影响；防御默认样式） ---------- */
+QCheckBox {
+    background: transparent;
+    border: none;
+    padding: 0;
+    spacing: 8px;
+}
+QCheckBox::indicator {
+    width: 44px;
+    height: 24px;
 }
 
 /* ---------- 按钮 ---------- */
