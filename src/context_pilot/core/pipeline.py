@@ -16,6 +16,7 @@ from context_pilot.retrieval.ast import AstRetriever
 from context_pilot.retrieval.base import Retriever
 from context_pilot.retrieval.keyword import KeywordRetriever
 from context_pilot.retrieval.ripgrep import RipgrepRetriever, RipgrepUnavailable
+from context_pilot.retrieval.vector import VectorRetriever
 from context_pilot.rules.loader import load as load_rules
 from context_pilot.rules.matcher import select as select_rules
 from context_pilot.rules.models import Rule
@@ -61,13 +62,13 @@ class Pipeline:
         self._project: ProjectContext = scan(Path(project_root or Path.cwd()))
         self._provider: LlmProvider = provider or StubProvider()
         self._weights = weights
-        # retrievers 为扩展点：新增检索来源（代码/记忆/后续向量）只需追加，
-        # 无需改动 enhance。默认代码检索：ripgrep + AST 符号。
+        # retrievers 为扩展点：新增检索来源只需追加，无需改动 enhance。
+        # 默认混合检索：ripgrep + AST 符号 + 向量近似。
         if retrievers is None:
             try:
-                self._retrievers = [RipgrepRetriever(), AstRetriever()]
+                self._retrievers = [RipgrepRetriever(), AstRetriever(), VectorRetriever()]
             except RipgrepUnavailable:
-                self._retrievers = [KeywordRetriever(), AstRetriever()]
+                self._retrievers = [KeywordRetriever(), AstRetriever(), VectorRetriever()]
         else:
             self._retrievers = list(retrievers)
 
