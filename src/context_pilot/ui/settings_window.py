@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
     QListWidgetItem,
     QPushButton,
     QScrollArea,
+    QSizePolicy,
     QSlider,
     QSpinBox,
     QStackedWidget,
@@ -91,9 +92,13 @@ class SettingsWindow(QWidget):
         page = QScrollArea()
         page.setWidgetResizable(True)
         page.setFrameShape(QFrame.Shape.NoFrame)
+        # 必须 AsNeeded：AlwaysOff 会冻结 widget 宽度，导致响应式失效
+        page.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        page.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         page.setStyleSheet("QScrollArea { background: #F9FAFB; border: none; }")
 
-        # 外层容器负责水平居中；内层固定最大宽度 800px
+        # 外层容器负责水平居中；内层自适应拉伸，最大宽度 800px。
+        # 用「左弹性 + 内容 + 右弹性」三明治：内容始终居中，随窗口伸缩，到 800 封顶。
         outer = QWidget()
         outer.setObjectName("ContentCenter")
         outer_layout = QHBoxLayout(outer)
@@ -101,9 +106,10 @@ class SettingsWindow(QWidget):
 
         container = QWidget()
         container.setObjectName("ContentColumn")
-        container.setFixedWidth(800)
-        outer_layout.addWidget(container, 0, Qt.AlignmentFlag.AlignHCenter)
-        outer_layout.addStretch(1)
+        container.setMinimumWidth(400)
+        container.setMaximumWidth(800)
+        container.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        outer_layout.addWidget(container, 1)  # 独占弹性：随窗口伸缩，到 800 封顶
 
         layout = QVBoxLayout(container)
         layout.setContentsMargins(0, 24, 0, 24)
