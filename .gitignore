@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# 虚拟环境
+.venv/
+venv/
+
+# 测试与工具缓存
+.pytest_cache/
+.ruff_cache/
+
+# 密钥与本地配置
+.env
+.env.*
+*.pem
+*.key
+credentials.*
+secrets.*
+
+# 构建产物
+dist/
+build/
+*.spec
