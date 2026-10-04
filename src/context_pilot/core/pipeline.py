@@ -14,6 +14,7 @@ from context_pilot.project.models import ProjectContext
 from context_pilot.project.scanner import scan
 from context_pilot.retrieval.base import Retriever
 from context_pilot.retrieval.keyword import KeywordRetriever
+from context_pilot.retrieval.ripgrep import RipgrepRetriever, RipgrepUnavailable
 from context_pilot.rules.loader import load as load_rules
 from context_pilot.rules.matcher import select as select_rules
 from context_pilot.rules.models import Rule
@@ -60,10 +61,14 @@ class Pipeline:
         self._provider: LlmProvider = provider or StubProvider()
         self._weights = weights
         # retrievers 为扩展点：新增检索来源（代码/记忆/后续向量）只需追加，
-        # 无需改动 enhance。默认仅代码检索。
-        self._retrievers: list[Retriever] = (
-            list(retrievers) if retrievers is not None else [KeywordRetriever()]
-        )
+        # 无需改动 enhance。默认代码检索优先用 ripgrep，不可用时回退关键词。
+        if retrievers is None:
+            try:
+                self._retrievers = [RipgrepRetriever()]
+            except RipgrepUnavailable:
+                self._retrievers = [KeywordRetriever()]
+        else:
+            self._retrievers = list(retrievers)
 
     async def enhance(
         self, prompt: str, options: EnhanceOptions | None = None
