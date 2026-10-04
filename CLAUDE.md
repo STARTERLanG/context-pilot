@@ -26,8 +26,17 @@ Minimal Context / Agent Agnostic / Human In The Loop / Progressive Intelligence�
 
 ## 当前状态
 
-仓库处于**设计阶段**：只有 PRD、工程规范与规则文件，尚无源码、`pyproject.toml` 或测试。
-下文「常用命令」为技术方案的既定约定，命令在脚手架落地后才可用。
+**1.0 可用**：托盘 + 全局热键 + 剪贴板闭环已跑通，接入 OpenAI 兼容 Provider 与配置系统。
+引擎层（core / project / rules / retrieval / memory / optimizer）已实现，测试 38 项通过。
+
+**已实现**：项目扫描、规则加载匹配、关键词检索、上下文排序（权重配置化）、
+项目记忆（SQLite）、Prompt 模板、OpenAI 兼容提供方、QML 预览窗、托盘、单实例、配置。
+
+**未实现**（PRD 后续阶段）：语义/向量/AST 检索、Code Graph、memory 自动抽取与冲突检测、
+diff 视图、上下文检查器、Agent 适配器自动写回。
+
+**已知局限**：关键词检索基于 ASCII 词元，纯中文查询匹配不到英文代码；
+记忆需显式 `store.add()` 写入；打包脚本 `scripts/build.ps1` 未经验证。
 
 ## 常用命令
 
