@@ -20,6 +20,7 @@ def test_load_creates_default_file_on_first_run(tmp_path):
     assert config_path(tmp_path).exists()
     assert config.llm.provider == "stub"  # 默认不联网
     assert config.general.hotkey == "ctrl+shift+e"
+    assert config.general.agent == "claude"
     assert config.memory.enabled is True
 
 

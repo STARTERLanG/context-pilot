@@ -16,6 +16,7 @@ _CONFIG_NAME = "config.toml"
 class GeneralConfig:
     project_root: str = ""
     hotkey: str = "ctrl+shift+e"
+    agent: str = "claude"
 
 
 @dataclass(frozen=True)
@@ -78,6 +79,7 @@ def load(base_dir: Path | None = None) -> Config:
         general=GeneralConfig(
             project_root=general.get("project_root", ""),
             hotkey=general.get("hotkey", "ctrl+shift+e"),
+            agent=general.get("agent", "claude"),
         ),
         llm=LlmConfig(
             provider=llm.get("provider", "stub"),
@@ -123,6 +125,8 @@ def _render(config: Config) -> str:
         f"project_root = {_toml_str(config.general.project_root)}",
         "# 全局热键，形如 ctrl+shift+e",
         f"hotkey = {_toml_str(config.general.hotkey)}",
+        "# 目标 Agent：claude / codex / gemini",
+        f"agent = {_toml_str(config.general.agent)}",
         "",
         "[llm]",
         "# provider 可选 stub / openai。stub 不联网，用于离线验证链路",

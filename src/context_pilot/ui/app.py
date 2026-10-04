@@ -8,6 +8,8 @@ from pathlib import Path
 
 from PySide6.QtWidgets import QApplication, QSystemTrayIcon
 
+from context_pilot.adapters.base import AgentAdapter
+from context_pilot.adapters.clipboard import claude, codex, gemini
 from context_pilot.config import Config, load as load_config
 from context_pilot.core.pipeline import Pipeline
 from context_pilot.memory.retriever import MemoryRetriever
@@ -49,7 +51,8 @@ def _build_provider(config: Config) -> LlmProvider:
 
 
 def _build_retrievers(config: Config, project_root: Path) -> list[Retriever]:
-    retrievers: list[Retriever] = [KeywordRetriever()]
+    # 代码检索默认交给 Pipeline（ripgrep 优先，回退关键词），这里只补记忆
+    retrievers: list[Retriever] = []
     if config.memory.enabled:
         try:
             retrievers.append(MemoryRetriever(MemoryStore(project_root)))
@@ -57,6 +60,11 @@ def _build_retrievers(config: Config, project_root: Path) -> list[Retriever]:
             # 记忆库不可用不应阻断主流程
             pass
     return retrievers
+
+
+def _build_adapter(config: Config) -> AgentAdapter:
+    agents = {"claude": claude, "codex": codex, "gemini": gemini}
+    return agents.get(config.general.agent, claude)()
 
 
 def main() -> int:
@@ -86,8 +94,10 @@ def main() -> int:
             provider=_build_provider(config),
             retrievers=_build_retrievers(config, project_root),
         ),
+        "adapter": _build_adapter(config),
     }
     model = PreviewModel()
+    model.set_adapter(state["adapter"])
     window = PreviewWindow(model, on_close=lambda: _handle_close(state, app))
     tray = Tray()
     hotkey = GlobalHotkey(config.general.hotkey)
@@ -135,6 +145,8 @@ def main() -> int:
             provider=_build_provider(new_config),
             retrievers=_build_retrievers(new_config, root),
         )
+        state["adapter"] = _build_adapter(new_config)
+        model.set_adapter(state["adapter"])
         try:
             hotkey.rebind(new_config.general.hotkey)
         except HotkeyRegistrationError as exc:

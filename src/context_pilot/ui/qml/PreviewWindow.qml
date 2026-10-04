@@ -298,6 +298,11 @@ Rectangle {
                 onClicked: preview.close()
             }
             AppButton {
+                text: "发送到 Agent"
+                variant: "secondary"
+                onClicked: preview.sendToAgent(enhancedArea.text)
+            }
+            AppButton {
                 text: "使用增强 Prompt"
                 variant: "primary"
                 onClicked: preview.use(enhancedArea.text)

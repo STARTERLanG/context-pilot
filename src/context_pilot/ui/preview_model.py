@@ -6,6 +6,8 @@ Python 侧算好（core/diff、core/tokens），QML 只负责渲染。
 
 from PySide6.QtCore import Property, QObject, Signal, Slot
 
+from context_pilot.adapters.base import AgentAdapter
+
 from context_pilot.core.diff import KIND_ADDED, KIND_REMOVED, compare
 from context_pilot.core.models import ContextItem, EnhancedPrompt
 from context_pilot.core.tokens import estimate
@@ -52,6 +54,7 @@ class PreviewModel(QObject):
 
     def __init__(self, parent: QObject | None = None) -> None:
         super().__init__(parent)
+        self._adapter: AgentAdapter | None = None
         self._original = ""
         self._enhanced = ""
         self._context: list[str] = []
@@ -114,10 +117,24 @@ class PreviewModel(QObject):
         self._status = f"失败：{message}"
         self.changed.emit()
 
+    def set_adapter(self, adapter: AgentAdapter) -> None:
+        self._adapter = adapter
+
     @Slot(str)
     def use(self, text: str) -> None:
         self._enhanced = text
         self.useRequested.emit(text)
+
+    @Slot(str, result=bool)
+    def sendToAgent(self, text: str) -> bool:
+        """把文本交给当前 Agent 适配器。返回是否已发出。"""
+        if self._adapter is None:
+            return False
+        try:
+            self._adapter.deliver(text)
+        except Exception:  # 剪贴板写入失败等，UI 边界吞掉并返回失败
+            return False
+        return True
 
     @Slot()
     def close(self) -> None:

@@ -78,6 +78,14 @@ class SettingsModel(QObject):
 
     hotkey = Property(str, _get_hotkey)
 
+    def _get_agent(self) -> str:
+        return self._config.general.agent
+
+    def _set_agent(self, value: str) -> None:
+        self._config = _replace_general(self._config, agent=value)
+
+    agent = Property(str, _get_agent, _set_agent)
+
     # ---- 模型 ----
     def _get_provider(self) -> str:
         return self._config.llm.provider

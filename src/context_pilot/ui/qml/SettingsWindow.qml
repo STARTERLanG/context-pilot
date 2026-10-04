@@ -136,6 +136,21 @@ Rectangle {
                     Layout.alignment: Qt.AlignVCenter
                 }
             }
+
+            Item { Layout.preferredHeight: theme.spaceXs }
+            FieldLabel { text: "目标 Agent" }
+            AppSegmented {
+                Layout.fillWidth: true
+                options: ["claude", "codex", "gemini"]
+                currentIndex: Math.max(0, options.indexOf(settings.agent))
+                onActivated: settings.agent = options[index]
+            }
+            Text {
+                text: "增强结果将通过剪贴板发送到所选 Agent"
+                color: theme.textMuted
+                font.family: theme.fontFamily
+                font.pixelSize: theme.fontCaption
+            }
             Item { Layout.fillHeight: true }
         }
 
