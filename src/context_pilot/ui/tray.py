@@ -26,6 +26,7 @@ def _make_icon() -> QIcon:
 
 class Tray(QSystemTrayIcon):
     showRequested = Signal()
+    settingsRequested = Signal()
     quitRequested = Signal()
 
     def __init__(self, parent=None) -> None:
@@ -35,6 +36,8 @@ class Tray(QSystemTrayIcon):
         menu = QMenu()
         show_action = menu.addAction("显示窗口")
         show_action.triggered.connect(self.showRequested.emit)
+        settings_action = menu.addAction("设置")
+        settings_action.triggered.connect(self.settingsRequested.emit)
         menu.addSeparator()
         quit_action = menu.addAction("退出")
         quit_action.triggered.connect(self.quitRequested.emit)

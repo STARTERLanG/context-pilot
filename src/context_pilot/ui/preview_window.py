@@ -5,6 +5,7 @@
 """
 
 import ctypes
+from collections.abc import Callable
 from pathlib import Path
 
 from PySide6.QtCore import QUrl
@@ -17,7 +18,10 @@ _QML_PATH = Path(__file__).parent / "qml" / "PreviewWindow.qml"
 
 
 class PreviewWindow:
-    def __init__(self, model: PreviewModel) -> None:
+    def __init__(
+        self, model: PreviewModel, on_close: Callable[[], None] | None = None
+    ) -> None:
+        self._on_close = on_close
         self._view = QQuickView()
         self._view.setTitle("ContextPilot")
         self._view.setColor(QColor("#17181b"))
@@ -30,6 +34,19 @@ class PreviewWindow:
         if self._view.status() == QQuickView.Status.Error:
             details = "\n".join(str(e) for e in self._view.errors())
             raise RuntimeError(f"QML 加载失败：\n{details}")
+
+        self._view.closing.connect(self._on_closing)
+
+    def _on_closing(self, event) -> None:
+        """拦截原生关闭按钮：由回调决定隐藏还是退出。"""
+        event.accept()
+        if self._on_close is not None:
+            self._on_close()
+        else:
+            self._view.hide()
+
+    def set_close_behavior(self, on_close: Callable[[], None]) -> None:
+        self._on_close = on_close
 
     def show_and_activate(self) -> None:
         self._view.show()

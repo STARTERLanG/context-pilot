@@ -21,8 +21,19 @@ from context_pilot.retrieval.base import Retriever
 from context_pilot.retrieval.keyword import KeywordRetriever
 from context_pilot.ui.preview_model import PreviewModel
 from context_pilot.ui.preview_window import PreviewWindow
+from context_pilot.ui.settings_model import SettingsModel
+from context_pilot.ui.settings_window import SettingsWindow
 from context_pilot.ui.tray import Tray
 from context_pilot.ui.worker import EnhanceWorker
+
+
+def _handle_close(state: dict, app: QApplication) -> None:
+    """按配置决定关窗行为：最小化到托盘或退出。"""
+    if state["config"].behavior.close_to_tray:
+        for widget in app.topLevelWindows():
+            widget.hide()
+    else:
+        app.quit()
 
 
 def _build_provider(config: Config) -> LlmProvider:
@@ -67,15 +78,21 @@ def main() -> int:
     project_root = (
         Path(config.general.project_root) if config.general.project_root else Path.cwd()
     )
-    pipeline = Pipeline(
-        project_root=project_root,
-        provider=_build_provider(config),
-        retrievers=_build_retrievers(config, project_root),
-    )
+    # 用可变容器承载，设置保存后需要原地替换
+    state = {
+        "config": config,
+        "pipeline": Pipeline(
+            project_root=project_root,
+            provider=_build_provider(config),
+            retrievers=_build_retrievers(config, project_root),
+        ),
+    }
     model = PreviewModel()
-    window = PreviewWindow(model)
+    window = PreviewWindow(model, on_close=lambda: _handle_close(state, app))
     tray = Tray()
-    hotkey = GlobalHotkey()
+    hotkey = GlobalHotkey(config.general.hotkey)
+    settings_model = SettingsModel(project_root)
+    settings_window = SettingsWindow(settings_model)
 
     # QThread 被 GC 会崩，需持有引用
     running_workers: list[EnhanceWorker] = []
@@ -88,7 +105,7 @@ def main() -> int:
             model.set_failed("剪贴板为空")
             return
 
-        worker = EnhanceWorker(pipeline, prompt)
+        worker = EnhanceWorker(state["pipeline"], prompt)
         worker.succeeded.connect(model.set_result)
         worker.failed.connect(model.set_failed)
         worker.finished.connect(lambda: running_workers.remove(worker))
@@ -96,8 +113,32 @@ def main() -> int:
         worker.start()
 
     def on_use(text: str) -> None:
-        write_clipboard_text(text)
+        if state["config"].behavior.auto_copy:
+            write_clipboard_text(text)
         window.hide()
+
+    def on_settings() -> None:
+        settings_model.reloadMemories()
+        settings_window.show_and_activate()
+
+    def on_saved() -> None:
+        # 保存后重建：配置可能改了 project_root / provider / 热键
+        new_config = load_config()
+        state["config"] = new_config
+        root = (
+            Path(new_config.general.project_root)
+            if new_config.general.project_root
+            else Path.cwd()
+        )
+        state["pipeline"] = Pipeline(
+            project_root=root,
+            provider=_build_provider(new_config),
+            retrievers=_build_retrievers(new_config, root),
+        )
+        try:
+            hotkey.rebind(new_config.general.hotkey)
+        except HotkeyRegistrationError as exc:
+            tray.notify("热键未能应用", str(exc))
 
     def on_quit() -> None:
         hotkey.unregister()
@@ -112,7 +153,12 @@ def main() -> int:
     model.useRequested.connect(on_use)
     model.closeRequested.connect(window.hide)
     tray.showRequested.connect(on_enhance)
+    tray.settingsRequested.connect(on_settings)
     tray.quitRequested.connect(on_quit)
+    settings_model.saved.connect(on_saved)
+    settings_model.saveFailed.connect(
+        lambda msg: tray.notify("设置未保存", msg)
+    )
     instance.show_requested.connect(on_enhance)
 
     app.aboutToQuit.connect(hotkey.unregister)

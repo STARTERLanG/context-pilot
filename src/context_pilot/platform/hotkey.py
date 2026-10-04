@@ -10,12 +10,10 @@ from ctypes import wintypes
 from PySide6.QtCore import QAbstractNativeEventFilter, QObject, Signal
 from PySide6.QtWidgets import QApplication, QWidget
 
+from context_pilot.platform.keys import MOD_NOREPEAT, format as format_hotkey, parse
+
 # Win32 常量
-MOD_CONTROL = 0x0002
-MOD_SHIFT = 0x0004
-MOD_NOREPEAT = 0x4000
 WM_HOTKEY = 0x0312
-VK_E = 0x45
 ERROR_HOTKEY_ALREADY_REGISTERED = 1409
 
 _HOTKEY_ID = 1
@@ -45,40 +43,61 @@ class _HotkeyEventFilter(QAbstractNativeEventFilter):
 
 
 class GlobalHotkey(QObject):
-    """注册 Ctrl+Shift+E 全局热键，按下时发出 pressed 信号。"""
+    """注册可配置的全局热键，按下时发出 pressed 信号。"""
 
     pressed = Signal()
 
-    def __init__(self, parent: QObject | None = None) -> None:
+    def __init__(self, sequence: str = "ctrl+shift+e", parent: QObject | None = None) -> None:
         super().__init__(parent)
+        self._sequence = sequence
         self._user32 = ctypes.WinDLL("user32", use_last_error=True)
         self._filter = _HotkeyEventFilter(self.pressed.emit)
         # 宿主窗口常驻且不可见：热键需要稳定的原生窗口句柄，
         # 不能绑在会被销毁的预览窗上。不 show() 也会分配句柄。
         self._host = QWidget()
         self._registered = False
+        self._active_sequence: str | None = None
 
-    def register(self) -> None:
+    @property
+    def sequence(self) -> str:
+        return self._active_sequence or self._sequence
+
+    def register(self, sequence: str | None = None) -> None:
         app = QApplication.instance()
         if app is None:
             raise RuntimeError("注册全局热键前必须先创建 QApplication")
+
+        sequence = sequence or self._sequence
+        try:
+            modifiers, vk = parse(sequence)
+        except ValueError as exc:
+            raise HotkeyRegistrationError(
+                f"热键 {sequence} 不合法：{exc}", occupied=False
+            ) from exc
 
         hwnd = int(self._host.winId())
         ok = self._user32.RegisterHotKey(
             wintypes.HWND(hwnd),
             _HOTKEY_ID,
-            MOD_CONTROL | MOD_SHIFT | MOD_NOREPEAT,
-            VK_E,
+            modifiers | MOD_NOREPEAT,
+            vk,
         )
         if not ok:
             error = ctypes.get_last_error()
             raise HotkeyRegistrationError(
-                f"注册热键 Ctrl+Shift+E 失败（错误码 {error}）",
+                f"注册热键 {format_hotkey(modifiers, vk)} 失败（错误码 {error}）",
                 occupied=(error == ERROR_HOTKEY_ALREADY_REGISTERED),
             )
 
+        self._active_sequence = sequence
         self._registered = True
         app.installNativeEventFilter(self._filter)
+
+    def rebind(self, sequence: str) -> None:
+        """换一个热键：先注销旧的，再注册新的。失败时旧热键不再生效。"""
+        self.unregister()
+        self._sequence = sequence
+        self.register(sequence)
 
     def unregister(self) -> None:
         if not self._registered:
