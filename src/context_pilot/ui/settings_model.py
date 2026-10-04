@@ -57,6 +57,35 @@ class SettingsModel(QObject):
     candidatesChanged = Signal()
     autostartFailed = Signal(str)
 
+    @staticmethod
+    def format_key(modifiers: int, qt_key: int) -> str:
+        """把 Qt 键码+修饰符格式化为热键字符串；不合法返回空串。
+
+        供 Widgets 层的 HotkeyEdit 使用（QML 层走 captureHotkey 槽）。
+        """
+        qt_to_modifier = {
+            0x04000000: 0x0002,  # Control
+            0x08000000: 0x0001,  # Alt
+            0x02000000: 0x0004,  # Shift
+            0x10000000: 0x0008,  # Meta/Win
+        }
+        win_modifiers = 0
+        for qt_flag, win_flag in qt_to_modifier.items():
+            if modifiers & qt_flag:
+                win_modifiers |= win_flag
+        if not win_modifiers:
+            return ""
+
+        from context_pilot.platform.keys import format as format_hotkey
+
+        vk = _QT_TO_VK.get(qt_key)
+        if vk is None:
+            return ""
+        try:
+            return format_hotkey(win_modifiers, vk)
+        except ValueError:
+            return ""
+
     def __init__(self, project_root, parent: QObject | None = None) -> None:
         super().__init__(parent)
         self._project_root = project_root
