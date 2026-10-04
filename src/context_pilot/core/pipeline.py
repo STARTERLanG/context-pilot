@@ -4,6 +4,7 @@
 不 import 任何具体实现之外的东西——新增检索器无需改动本文件。
 """
 
+from collections.abc import Sequence
 from pathlib import Path
 
 from context_pilot.core.models import ContextItem, EnhanceOptions, EnhancedPrompt
@@ -51,13 +52,17 @@ class Pipeline:
         self,
         project_root: Path | str | None = None,
         provider: LlmProvider | None = None,
-        retriever: Retriever | None = None,
         weights: RankingWeights | None = None,
+        retrievers: Sequence[Retriever] | None = None,
     ) -> None:
         self._project: ProjectContext = scan(Path(project_root or Path.cwd()))
         self._provider: LlmProvider = provider or StubProvider()
-        self._retriever: Retriever = retriever or KeywordRetriever()
         self._weights = weights
+        # retrievers 为扩展点：新增检索来源（代码/记忆/后续向量）只需追加，
+        # 无需改动 enhance。默认仅代码检索。
+        self._retrievers: list[Retriever] = (
+            list(retrievers) if retrievers is not None else [KeywordRetriever()]
+        )
 
     async def enhance(
         self, prompt: str, options: EnhanceOptions | None = None
@@ -69,10 +74,11 @@ class Pipeline:
         rules = select_rules(load_rules(self._project.root))
         rule_sources = {rule.source for rule in rules}
         # 规则文件已作为 rule 进入上下文，避免检索器再以 code 重复收录
+        retrieved: list[ContextItem] = []
+        for retriever in self._retrievers:
+            retrieved.extend(retriever.search(text, self._project))
         code_items = [
-            item
-            for item in self._retriever.search(text, self._project)
-            if item.source not in rule_sources
+            item for item in retrieved if item.source not in rule_sources
         ]
         items = rank(
             [_rule_to_item(rule) for rule in rules] + code_items, self._weights
