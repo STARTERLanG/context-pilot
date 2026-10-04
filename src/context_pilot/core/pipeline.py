@@ -29,6 +29,7 @@ def _rule_to_item(rule: Rule) -> ContextItem:
         content=rule.content,
         priority=rule.priority,
         path=str(rule.path) if rule.path else None,
+        reason=f"项目规则，优先级 {rule.priority}，激活策略 {rule.activation.value}",
     )
 
 

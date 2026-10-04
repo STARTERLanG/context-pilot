@@ -44,6 +44,23 @@ def _score(rel_path: str, text: str, tokens: list[str]) -> float:
     return score
 
 
+def _explain(rel_path: str, text: str, tokens: list[str]) -> str:
+    """生成人类可读的选中理由（PRD 10.2）。"""
+    name = Path(rel_path).name.lower()
+    parent = str(Path(rel_path).parent).lower()
+    lowered = text.lower()
+    parts: list[str] = []
+    for token in tokens:
+        if token in name:
+            parts.append(f"文件名匹配 {token}")
+        elif token in parent:
+            parts.append(f"路径匹配 {token}")
+        hits = lowered.count(token)
+        if hits:
+            parts.append(f"内容出现 {token} {hits} 次")
+    return "；".join(parts) if parts else "关键词命中"
+
+
 def _iter_candidate_files(root: Path):
     for dirpath, dirnames, filenames in os.walk(root):
         dirnames[:] = [d for d in dirnames if not is_ignored_dir(d)]
@@ -87,6 +104,7 @@ class KeywordRetriever:
                         path=rel,
                         content=text[:_MAX_ITEM_CHARS],
                         relevance=score,
+                        reason=_explain(rel, text, tokens),
                     ),
                 )
             )

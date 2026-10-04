@@ -15,6 +15,7 @@ class ContextItem:
     priority: int = 0
     path: str | None = None
     token_cost: int = 0
+    reason: str = ""  # 为何被选中，供上下文检查器展示（PRD 10.2）
 
 
 @dataclass(frozen=True)

@@ -45,6 +45,7 @@ class MemoryRetriever:
                 source=f"memory:{memory.type.value}",
                 content=memory.content,
                 relevance=score,
+                reason=f"记忆命中关键词，置信度 {memory.confidence:g}",
             )
             for score, memory in scored[: self._max_results]
         ]

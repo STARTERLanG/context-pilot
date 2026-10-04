@@ -3,12 +3,15 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import "components"
 
-// 预览窗：顶栏 + 原始指令 + 增强结果（主体）+ 上下文胶囊 + 底部操作栏。
+// 预览窗：顶栏 + 原始指令 + 三视图切换（增强/差异/上下文）+ Token 统计 + 底部操作栏。
 Rectangle {
     id: root
-    width: 780
-    height: 660
+    width: 820
+    height: 680
     color: theme.background
+
+    readonly property var views: ["增强结果", "差异", "上下文"]
+    property int currentView: 0
 
     // ---------- 顶栏 ----------
     Item {
@@ -99,7 +102,7 @@ Rectangle {
         }
         AppCard {
             Layout.fillWidth: true
-            Layout.preferredHeight: 62
+            Layout.preferredHeight: 56
             padding: theme.spaceMd
             AppTextArea {
                 anchors.fill: parent
@@ -108,70 +111,152 @@ Rectangle {
             }
         }
 
-        // 增强结果（占据剩余空间）
-        RowLayout {
-            Layout.fillWidth: true
-            spacing: theme.spaceSm
-            Text {
-                text: "增强结果"
-                color: theme.textMuted
-                font.family: theme.fontFamily
-                font.pixelSize: theme.fontCaption
-                font.weight: Font.DemiBold
-            }
-            Text {
-                text: "可编辑"
-                color: theme.textMuted
-                font.family: theme.fontFamily
-                font.pixelSize: theme.fontCaption
-            }
-            Item { Layout.fillWidth: true }
+        // 视图切换
+        AppSegmented {
+            Layout.fillWidth: false
+            options: root.views
+            currentIndex: root.currentView
+            onActivated: root.currentView = index
         }
+
+        // ---------- 增强结果 ----------
         AppTextArea {
             id: enhancedArea
             Layout.fillWidth: true
             Layout.fillHeight: true
+            visible: root.currentView === 0
             text: preview.enhancedPrompt
         }
 
-        // 上下文
-        RowLayout {
+        // ---------- 差异视图 ----------
+        ListView {
             Layout.fillWidth: true
-            Layout.topMargin: theme.spaceXs
-            spacing: theme.spaceSm
-            Text {
-                text: "上下文"
-                color: theme.textMuted
-                font.family: theme.fontFamily
-                font.pixelSize: theme.fontCaption
-                font.weight: Font.DemiBold
+            Layout.fillHeight: true
+            visible: root.currentView === 1
+            clip: true
+            model: preview.diffRows
+            spacing: 0
+            delegate: Rectangle {
+                required property var modelData
+                width: ListView.view.width
+                height: 26
+                color: modelData.kind === "added" ? "#143322"
+                     : modelData.kind === "removed" ? "#33161C"
+                     : "transparent"
+
+                Row {
+                    anchors.fill: parent
+                    anchors.leftMargin: theme.spaceMd
+                    spacing: theme.spaceMd
+                    Text {
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: 30
+                        text: modelData.oldLine !== null ? modelData.oldLine : ""
+                        color: theme.textMuted
+                        font.family: theme.fontMono
+                        font.pixelSize: theme.fontCaption
+                    }
+                    Text {
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: 30
+                        text: modelData.newLine !== null ? modelData.newLine : ""
+                        color: theme.textMuted
+                        font.family: theme.fontMono
+                        font.pixelSize: theme.fontCaption
+                    }
+                    Text {
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: 20
+                        text: modelData.kind === "added" ? "+"
+                             : modelData.kind === "removed" ? "−"
+                             : " "
+                        color: modelData.kind === "added" ? theme.success
+                             : modelData.kind === "removed" ? theme.danger
+                             : theme.textMuted
+                        font.family: theme.fontMono
+                        font.pixelSize: theme.fontBody
+                        font.weight: Font.Bold
+                    }
+                    Text {
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: modelData.text
+                        color: modelData.kind === "removed" ? theme.danger
+                             : modelData.kind === "added" ? theme.success
+                             : theme.textSecondary
+                        font.family: theme.fontMono
+                        font.pixelSize: theme.fontBody
+                        elide: Text.ElideRight
+                    }
+                }
             }
             Text {
-                text: preview.contextFiles.length === 0 ? "无" : preview.contextFiles.length + " 项"
+                anchors.centerIn: parent
+                visible: preview.diffRows.length === 0
+                text: "暂无差异"
                 color: theme.textMuted
                 font.family: theme.fontFamily
-                font.pixelSize: theme.fontCaption
+                font.pixelSize: theme.fontBody
             }
         }
-        Flow {
+
+        // ---------- 上下文检查器 ----------
+        ListView {
             Layout.fillWidth: true
+            Layout.fillHeight: true
+            visible: root.currentView === 2
+            clip: true
+            model: preview.contextRows
             spacing: theme.spaceSm
-            visible: preview.contextFiles.length > 0
-            Repeater {
-                model: preview.contextFiles
-                delegate: Rectangle {
-                    required property string modelData
-                    height: 26
-                    width: chipLabel.implicitWidth + theme.spaceMd * 2
-                    radius: theme.radiusFull
-                    color: theme.surface
-                    border.width: 1
-                    border.color: theme.border
+            delegate: Rectangle {
+                required property var modelData
+                width: ListView.view.width
+                height: ctxCol.implicitHeight + theme.spaceMd * 2
+                radius: theme.radiusMd
+                color: theme.surface
+                border.width: 1
+                border.color: theme.border
+
+                ColumnLayout {
+                    id: ctxCol
+                    anchors.fill: parent
+                    anchors.margins: theme.spaceMd
+                    spacing: theme.spaceXs
+                    Row {
+                        spacing: theme.spaceSm
+                        Text {
+                            text: modelData.source
+                            color: theme.textPrimary
+                            font.family: theme.fontMono
+                            font.pixelSize: theme.fontSmall
+                            font.weight: Font.DemiBold
+                        }
+                        Rectangle {
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: typeLabel.implicitWidth + theme.spaceSm * 2
+                            height: 18
+                            radius: theme.radiusFull
+                            color: theme.accentSoft
+                            Text {
+                                id: typeLabel
+                                anchors.centerIn: parent
+                                text: modelData.type
+                                color: theme.accent
+                                font.family: theme.fontFamily
+                                font.pixelSize: 10
+                            }
+                        }
+                    }
                     Text {
-                        id: chipLabel
-                        anchors.centerIn: parent
-                        text: modelData
+                        text: "理由：" + modelData.reason
                         color: theme.textSecondary
+                        font.family: theme.fontFamily
+                        font.pixelSize: theme.fontSmall
+                        wrapMode: Text.Wrap
+                        Layout.fillWidth: true
+                    }
+                    Text {
+                        text: "相关度 " + modelData.relevance + " · " + modelData.tokens + " tokens"
+                        color: theme.textMuted
                         font.family: theme.fontFamily
                         font.pixelSize: theme.fontCaption
                     }
@@ -180,7 +265,7 @@ Rectangle {
         }
     }
 
-    // ---------- 底部操作栏 ----------
+    // ---------- 底部：Token 统计 + 操作 ----------
     Item {
         id: bottomBar
         anchors.left: parent.left
@@ -189,12 +274,15 @@ Rectangle {
         anchors.leftMargin: theme.spaceXl
         anchors.rightMargin: theme.spaceXl
         anchors.bottomMargin: theme.spaceLg
-        height: 40
+        height: 44
 
         Text {
             anchors.left: parent.left
             anchors.verticalCenter: parent.verticalCenter
-            text: "Esc 关闭    Enter 使用"
+            text: "原始 " + preview.tokenStats.original
+                + " · 上下文 " + preview.tokenStats.context
+                + " · 增强 " + preview.tokenStats.enhanced
+                + " · 合计 " + preview.tokenStats.total
             color: theme.textMuted
             font.family: theme.fontFamily
             font.pixelSize: theme.fontCaption
