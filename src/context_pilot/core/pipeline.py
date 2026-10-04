@@ -10,6 +10,7 @@ from pathlib import Path
 from context_pilot.core.models import ContextItem, EnhanceOptions, EnhancedPrompt
 from context_pilot.core.ranking import RankingWeights, rank
 from context_pilot.optimizer.provider import LlmProvider, StubProvider
+from context_pilot.project.knowledge import summarize as summarize_project
 from context_pilot.project.models import ProjectContext
 from context_pilot.project.scanner import scan
 from context_pilot.retrieval.ast import AstRetriever
@@ -88,8 +89,18 @@ class Pipeline:
         code_items = [
             item for item in retrieved if item.source not in rule_sources
         ]
+        # 项目知识摘要作为 knowledge 项，排名靠前
+        knowledge = ContextItem(
+            id="project:knowledge",
+            type="knowledge",
+            source="项目知识摘要",
+            content=summarize_project(self._project),
+            priority=200,
+            reason="项目级背景知识",
+        )
         items = rank(
-            [_rule_to_item(rule) for rule in rules] + code_items, self._weights
+            [_rule_to_item(rule) for rule in rules] + [knowledge] + code_items,
+            self._weights,
         )
 
         enhanced = await self._provider.enhance(text, _render_context(items))
