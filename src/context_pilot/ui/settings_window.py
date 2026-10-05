@@ -43,7 +43,6 @@ from context_pilot.ui.widgets import ArrowComboBox, Card, HotkeyEdit, ToggleSwit
 
 _NAV_ITEMS = (
     ("通用", "gear"),
-    ("模型", "chip"),
     ("模型配置", "database"),
     ("项目索引", "folder"),
     ("上下文", "sliders"),
@@ -211,11 +210,10 @@ class SettingsWindow(QWidget):
         content_layout.setContentsMargins(0, 0, 0, 0)
         content_layout.setSpacing(0)
 
-        # 顺序构建 8 个区块，记录每个区块 widget 供锚点定位
+        # 顺序构建 7 个区块，记录每个区块 widget 供锚点定位
         self._sections: list[QWidget] = []
         for title, builder in (
             ("通用", self._section_general),
-            ("模型", self._section_model),
             ("模型配置", self._section_profiles),
             ("项目索引", self._section_projects),
             ("上下文", self._section_context),
@@ -328,69 +326,125 @@ class SettingsWindow(QWidget):
         self._field_row(card, "项目根目录", "被增强的项目；留空则用启动时的工作目录", self._project_root_input())
         self._field_row(card, "目标 Agent", "增强结果通过剪贴板发送到所选 Agent", self._agent_combo())
 
-    def _section_model(self, layout: QVBoxLayout) -> None:
-        card = self._card(layout)
-        self._field_row(card, "提供方", "stub 不联网，仅用于离线验证链路", self._provider_combo())
-        self._field_row(card, "接口地址", "任意 OpenAI 兼容端点", self._text_input("baseUrl", "https://api.openai.com/v1"))
-        self._field_row(card, "API Key", "只保存在本机配置，不进版本库", self._text_input("apiKey", "", password=True))
-        self._field_row(card, "模型名", "如 deepseek-chat / gpt-4o-mini", self._text_input("model", ""))
-        self._field_row(card, "超时（秒）", "请求 LLM 的最长等待时间", self._spin_input("timeout", 5, 600, 5))
-
     # ---------- 模型配置 CRUD ----------
     def _section_profiles(self, layout: QVBoxLayout) -> None:
         card = self._card(layout)
         self._field_row(
-            card, "模型配置", "多套 OpenAI 兼容配置，启用其一生效；增删改查见下方列表",
-            QLabel(""),  # 占位右侧，说明文字已足够
+            card, "模型配置", "多套 OpenAI 兼容配置；启用其一生效。点击条目可展开编辑",
+            QLabel(""),
         )
 
-        # 新增表单（简化：一行内输入 name + 模型，其余字段默认；编辑/删除走列表）
+        # 新增表单：名称 + Base URL + Key + 获取模型下拉
         add_row = QHBoxLayout()
         add_row.setSpacing(12)
+
         name_field = QLineEdit()
         name_field.setPlaceholderText("配置名称")
         add_row.addWidget(name_field, 1)
+
         base_field = QLineEdit()
         base_field.setPlaceholderText("Base URL")
         add_row.addWidget(base_field, 2)
-        model_field = QLineEdit()
-        model_field.setPlaceholderText("模型 ID")
-        add_row.addWidget(model_field, 1)
+
         key_field = QLineEdit()
         key_field.setPlaceholderText("API Key")
         key_field.setEchoMode(QLineEdit.EchoMode.Password)
         add_row.addWidget(key_field, 1)
+
+        model_combo = ArrowComboBox()
+        model_combo.addItem("先获取模型")
+        add_row.addWidget(model_combo, 2)
+
+        fetch_btn = QPushButton("获取模型")
+        fetch_btn.setObjectName("PrimaryButton")
+        add_row.addWidget(fetch_btn)
+
         add_btn = QPushButton("新增")
         add_btn.setObjectName("PrimaryButton")
-        add_btn.clicked.connect(
-            lambda: self._add_profile(name_field, base_field, model_field, key_field, layout)
-        )
         add_row.addWidget(add_btn)
+
         card.addLayout(add_row)
+        self._profile_form_status = QLabel("")
+        self._profile_form_status.setObjectName("Desc")
+        card.addWidget(self._profile_form_status)
+
+        fetch_btn.clicked.connect(
+            lambda: self._fetch_models(base_field, key_field, model_combo, fetch_btn)
+        )
+        add_btn.clicked.connect(
+            lambda: self._add_profile(name_field, base_field, key_field, model_combo, layout)
+        )
 
         self._profile_list_card = self._card(layout)
         self._refresh_profile_list()
 
-    def _add_profile(self, name_field, base_field, model_field, key_field, layout) -> None:
+    def _fetch_models(self, base_field, key_field, model_combo, fetch_btn) -> None:
+        """拉取模型列表填充下拉；带加载态与错误反馈。"""
+        base_url = base_field.text().strip()
+        api_key = key_field.text().strip()
+        if not base_url or not api_key:
+            self._show_status("请先填写 Base URL 与 API Key", error=True)
+            return
+
+        from context_pilot.optimizer.openai_provider import ProviderError, fetch_models
+
+        fetch_btn.setEnabled(False)
+        fetch_btn.setText("获取中…")
+        self._show_status("正在获取模型列表…")
+
+        class FetchThread(QThread):
+            def run(self):
+                try:
+                    self.models = fetch_models(base_url, api_key)
+                    self.error = ""
+                except ProviderError as exc:
+                    self.models = []
+                    self.error = str(exc)
+
+        thread = FetchThread()
+        thread.finished.connect(
+            lambda: self._on_models_fetched(thread, model_combo, fetch_btn)
+        )
+        thread.start()
+        if not hasattr(self, "_fetch_threads"):
+            self._fetch_threads = []
+        self._fetch_threads.append(thread)
+        thread.finished.connect(lambda: self._fetch_threads.remove(thread))
+
+    def _on_models_fetched(self, thread, model_combo, fetch_btn) -> None:
+        fetch_btn.setEnabled(True)
+        fetch_btn.setText("获取模型")
+        model_combo.clear()
+        if thread.error:
+            self._show_status(thread.error, error=True)
+            return
+        model_combo.addItems(thread.models)
+        self._show_status(f"获取到 {len(thread.models)} 个模型，请选择")
+
+    def _add_profile(self, name_field, base_field, key_field, model_combo, layout) -> None:
         try:
             self._profile_store.add(
                 name=name_field.text().strip(),
                 provider="openai",
                 base_url=base_field.text().strip(),
                 api_key=key_field.text().strip(),
-                model=model_field.text().strip(),
+                model=model_combo.currentText().strip(),
                 temperature=0.2,
                 max_tokens=6000,
                 enabled=False,
             )
-            name_field.clear(); base_field.clear(); model_field.clear(); key_field.clear()
+            name_field.clear(); base_field.clear(); key_field.clear()
+            model_combo.clear(); model_combo.addItem("先获取模型")
+            self._show_status("已新增模型配置")
         except ValueError as exc:
-            self._profile_error(str(exc), layout)
+            self._show_status(str(exc), error=True)
         self._refresh_profile_list()
 
     def _refresh_profile_list(self) -> None:
-        self._profile_list_card: QVBoxLayout
-        # 清空旧条目
+        self._rebuild_profile_rows()
+
+    def _rebuild_profile_rows(self) -> None:
+        """重建列表行：避免占位布局混乱，逐项生成带展开的条目。"""
         while self._profile_list_card.count():
             item = self._profile_list_card.takeAt(0)
             if item.widget():
@@ -404,50 +458,139 @@ class SettingsWindow(QWidget):
             return
 
         for profile in profiles:
+            container = QWidget()
+            col = QVBoxLayout(container)
+            col.setContentsMargins(0, 0, 0, 0)
+            col.setSpacing(6)
+
+            # 主行
             row = QHBoxLayout()
             row.setSpacing(12)
-            text = QLabel(f"{profile.name} · {profile.model} · {profile.api_key}")
+            toggle = ToggleSwitch()
+            toggle.setChecked(profile.enabled)
+            toggle.toggled.connect(
+                lambda checked, pid=profile.id: self._toggle_profile(pid, checked)
+            )
+            row.addWidget(toggle)
+
+            text = QLabel(f"{profile.name}  ·  {profile.model}")
             text.setObjectName("Desc")
             text.setWordWrap(True)
+            text.setCursor(Qt.CursorShape.PointingHandCursor)
             row.addWidget(text, 1)
 
-            if not profile.enabled:
-                enable_btn = QPushButton("启用")
-                enable_btn.setObjectName("PrimaryButton")
-                enable_btn.clicked.connect(
-                    lambda _=False, pid=profile.id: self._enable_profile(pid)
-                )
-                row.addWidget(enable_btn)
-            else:
+            if profile.enabled:
                 active = QLabel("生效中")
                 active.setObjectName("Desc")
                 row.addWidget(active)
+
+            test_btn = QPushButton("测试")
+            test_btn.setObjectName("PrimaryButton")
+            test_btn.clicked.connect(
+                lambda _=False, pid=profile.id, b=test_btn: self._test_profile(pid, b)
+            )
+            row.addWidget(test_btn)
 
             delete_btn = QPushButton("删除")
             delete_btn.setObjectName("DangerButton")
             delete_btn.clicked.connect(
                 lambda _=False, pid=profile.id: self._delete_profile(pid)
             )
-            row.addWidget(delete_btn)
-            self._profile_list_card.addLayout(row)
+            row.addWidget(delete_btn, 0, Qt.AlignmentFlag.AlignTop)
+            col.addLayout(row)
 
-    def _enable_profile(self, profile_id: str) -> None:
-        self._profile_store.set_enabled(profile_id, True)
+            # 展开编辑区
+            edit = QWidget()
+            edit.setVisible(False)
+            edit_layout = QHBoxLayout(edit)
+            edit_layout.setContentsMargins(0, 0, 0, 0)
+            edit_layout.setSpacing(12)
+            name_edit = QLineEdit(profile.name)
+            edit_layout.addWidget(name_edit, 1)
+            base_edit = QLineEdit(profile.base_url)
+            edit_layout.addWidget(base_edit, 2)
+            model_edit = QLineEdit(profile.model)
+            edit_layout.addWidget(model_edit, 1)
+            save_btn = QPushButton("保存")
+            save_btn.setObjectName("PrimaryButton")
+            save_btn.clicked.connect(
+                lambda _=False, pid=profile.id, ne=name_edit, be=base_edit, me=model_edit:
+                self._save_profile(pid, ne.text(), be.text(), me.text())
+            )
+            edit_layout.addWidget(save_btn)
+            col.addWidget(edit)
+
+            # 点击主行文字展开/收起
+            text.mousePressEvent = (
+                lambda event, e=edit: e.setVisible(not e.isVisible())
+            )
+
+            self._profile_list_card.addWidget(container)
+
+    def _toggle_profile(self, profile_id: str, enabled: bool) -> None:
+        self._profile_store.set_enabled(profile_id, enabled)
         self._refresh_profile_list()
+
+    def _save_profile(self, profile_id: str, name: str, base_url: str, model: str) -> None:
+        self._profile_store.update(
+            profile_id, name=name.strip(), base_url=base_url.strip(), model=model.strip()
+        )
+        self._show_status("已保存修改")
+        self._refresh_profile_list()
+
+    def _test_profile(self, profile_id: str, button) -> None:
+        """连通性测试：调最小 chat 请求，反馈成功/失败与耗时。"""
+        profile = self._profile_store.get(profile_id)
+        if profile is None:
+            return
+        base_url = profile.base_url
+        api_key = self._profile_store.reveal_key_by_id(profile_id)
+        model = profile.model
+
+        from context_pilot.optimizer.openai_provider import ProviderError, check_connection
+
+        from PySide6.QtCore import QThread
+
+        button.setEnabled(False)
+        button.setText("测试中…")
+
+        class TestThread(QThread):
+            def run(self):
+                try:
+                    self.elapsed = check_connection(base_url, api_key, model)
+                    self.error = ""
+                except ProviderError as exc:
+                    self.elapsed = None
+                    self.error = str(exc)
+
+        thread = TestThread()
+        thread.finished.connect(lambda: self._on_test_done(thread, button))
+        thread.start()
+        if not hasattr(self, "_test_threads"):
+            self._test_threads = []
+        self._test_threads.append(thread)
+        thread.finished.connect(lambda: self._test_threads.remove(thread))
+
+    def _on_test_done(self, thread, button) -> None:
+        button.setEnabled(True)
+        button.setText("测试")
+        if thread.error:
+            self._show_status(f"连通性测试失败：{thread.error}", error=True)
+        else:
+            self._show_status(f"连通性测试成功，耗时 {thread.elapsed}s")
 
     def _delete_profile(self, profile_id: str) -> None:
         self._profile_store.delete(profile_id)
         self._refresh_profile_list()
 
-    def _profile_error(self, message: str, layout) -> None:
-        err = QLabel(message)
-        err.setObjectName("Desc")
-        err.setStyleSheet("color: #DC2626;")
-        layout.addWidget(err)
-        # 3 秒后移除
+    def _show_status(self, message: str, error: bool = False) -> None:
+        self._profile_form_status.setText(message)
+        self._profile_form_status.setStyleSheet(
+            "color: #DC2626;" if error else "color: #16A34A;"
+        )
         from PySide6.QtCore import QTimer
 
-        QTimer.singleShot(3000, err.deleteLater)
+        QTimer.singleShot(4000, lambda: self._profile_form_status.setText(""))
 
     # ---------- 项目索引 ----------
     def _section_projects(self, layout: QVBoxLayout) -> None:

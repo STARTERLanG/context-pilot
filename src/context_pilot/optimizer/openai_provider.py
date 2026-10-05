@@ -14,6 +14,83 @@ class ProviderError(RuntimeError):
     """调用 LLM 失败。message 面向用户，不含密钥。"""
 
 
+
+
+def fetch_models(base_url: str, api_key: str, timeout: float = 15.0) -> list[str]:
+    """拉取 OpenAI 兼容端点的可用模型列表（GET /v1/models）。
+
+    返回模型 ID 列表。任何失败抛 ProviderError（不含密钥）。
+    """
+    if not api_key:
+        raise ProviderError("未填写 API Key")
+    headers = {"Authorization": f"Bearer {api_key}"}
+    try:
+        with httpx.Client(timeout=timeout) as client:
+            response = client.get(f"{base_url.rstrip('/')}/models", headers=headers)
+    except httpx.TimeoutException as exc:
+        raise ProviderError(f"获取模型超时（{timeout}s）") from exc
+    except httpx.HTTPError as exc:
+        raise ProviderError("无法连接服务，请检查 Base URL 与网络") from exc
+
+    if response.status_code == 401:
+        raise ProviderError("鉴权失败，请检查 API Key")
+    if response.status_code >= 400:
+        raise ProviderError(f"接口返回错误状态 {response.status_code}")
+
+    try:
+        data = response.json()
+        models = [item.get("id") for item in data.get("data", [])]
+    except (ValueError, AttributeError, TypeError) as exc:
+        raise ProviderError("接口返回结构异常，缺少 data 列表") from exc
+
+    ids = [m for m in models if isinstance(m, str) and m]
+    if not ids:
+        raise ProviderError("接口未返回任何可用模型")
+    return ids
+
+
+def check_connection(
+    base_url: str, api_key: str, model: str, timeout: float = 15.0
+) -> float:
+    """连通性测试：发一个最小 chat 请求，成功返回耗时（秒）。
+
+    只校验连通与鉴权，不要求生成完整内容（用极小 max_tokens）。
+    """
+    if not api_key:
+        raise ProviderError("未填写 API Key")
+    if not model:
+        raise ProviderError("未选择模型")
+    payload = {
+        "model": model,
+        "messages": [{"role": "user", "content": "ping"}],
+        "max_tokens": 1,
+    }
+    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+    import time as _time
+
+    started = _time.monotonic()
+    try:
+        with httpx.Client(timeout=timeout) as client:
+            response = client.post(
+                f"{base_url.rstrip('/')}/chat/completions",
+                json=payload,
+                headers=headers,
+            )
+    except httpx.TimeoutException as exc:
+        raise ProviderError(f"连接超时（{timeout}s）") from exc
+    except httpx.HTTPError as exc:
+        raise ProviderError("无法连接服务，请检查 Base URL 与网络") from exc
+
+    elapsed = _time.monotonic() - started
+    if response.status_code == 401:
+        raise ProviderError("鉴权失败，请检查 API Key")
+    if response.status_code == 404:
+        raise ProviderError("模型不存在或接口路径不对")
+    if response.status_code >= 400:
+        raise ProviderError(f"接口返回错误状态 {response.status_code}")
+    return round(elapsed, 2)
+
+
 class OpenAiProvider:
     def __init__(
         self,

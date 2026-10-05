@@ -84,6 +84,8 @@ def main() -> int:
     if not QSystemTrayIcon.isSystemTrayAvailable():
         print("系统托盘不可用，ContextPilot 无法运行", file=sys.stderr)
         return 1
+        print("系统托盘不可用，ContextPilot 无法运行", file=sys.stderr)
+        return 1
 
     # 先建 QApplication 再判单实例（QLocalServer 需要事件循环）
     instance = SingleInstance()
