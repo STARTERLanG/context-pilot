@@ -285,11 +285,12 @@ Rectangle {
                     text: ""
                     Component.onCompleted: promptArea.text = preview.originalPrompt
                 }
-                // 热键触发新增强会话（begin 用剪贴板内容覆盖 originalPrompt）时，
-                // 同步刷新输入框；用户手动编辑不受影响（编辑不触发模型 changed）。
+                // 仅新会话开始时同步输入框（begin 用剪贴板覆盖 originalPrompt）。
+                // 不监听 changed：set_result/set_failed 也会 emit changed，
+                // 若同步会覆盖用户编辑或把残留内容写回输入框。
                 Connections {
                     target: preview
-                    function onChanged() {
+                    function onSessionStarted() {
                         promptArea.text = preview.originalPrompt
                     }
                 }

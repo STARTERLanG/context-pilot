@@ -54,6 +54,7 @@ def _diff_rows(original: str, enhanced: str) -> list[dict]:
 
 class PreviewModel(QObject):
     changed = Signal()
+    sessionStarted = Signal()  # 仅新会话开始时触发（begin）
     useRequested = Signal(str)
     closeRequested = Signal()
 
@@ -113,6 +114,7 @@ class PreviewModel(QObject):
         self._diff_rows = []
         self._context_rows = []
         self.changed.emit()
+        self.sessionStarted.emit()
 
     def set_result(self, result: EnhancedPrompt) -> None:
         self._original = result.original_prompt
