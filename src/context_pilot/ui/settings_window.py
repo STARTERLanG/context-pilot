@@ -8,6 +8,8 @@
         表单行 = 左文字区固定 400px + addStretch 弹簧 + 右控件固定 240×36。
 """
 
+from pathlib import Path
+
 from PySide6.QtCore import QPointF, QSize, Qt
 from PySide6.QtGui import QColor, QIcon, QPainter, QPen, QPixmap, QPolygonF
 from PySide6.QtWidgets import (
@@ -27,6 +29,14 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from context_pilot.models.profiles import ModelProfile, ProfileStore
+from context_pilot.projects.indexer import Indexer
+from context_pilot.projects.projects import (
+    STATUS_DONE,
+    STATUS_FAILED,
+    STATUS_RUNNING,
+    ProjectStore,
+)
 from context_pilot.ui.settings_model import SettingsModel
 from context_pilot.ui.settings_style import QSS
 from context_pilot.ui.widgets import ArrowComboBox, Card, HotkeyEdit, ToggleSwitch
@@ -34,6 +44,8 @@ from context_pilot.ui.widgets import ArrowComboBox, Card, HotkeyEdit, ToggleSwit
 _NAV_ITEMS = (
     ("通用", "gear"),
     ("模型", "chip"),
+    ("模型配置", "database"),
+    ("项目索引", "folder"),
     ("上下文", "sliders"),
     ("快捷键", "keyboard"),
     ("记忆", "list"),
@@ -94,6 +106,14 @@ def _nav_icon(kind: str, color: str = "#6B7280") -> QIcon:
                 ]
             )
         )
+    elif kind == "database":  # 模型配置：圆柱
+        p.drawEllipse(3, 3, 10, 4)
+        p.drawLine(3, 5, 3, 12)
+        p.drawLine(13, 5, 13, 12)
+        p.drawEllipse(3, 10, 10, 4)
+    elif kind == "folder":  # 项目索引：文件夹
+        p.drawRoundedRect(1, 3, 14, 10, 2, 2)
+        p.drawLine(1, 6, 15, 6)
     p.end()
     return QIcon(pixmap)
 
@@ -101,11 +121,15 @@ def _nav_icon(kind: str, color: str = "#6B7280") -> QIcon:
 class SettingsWindow(QWidget):
     """设置主窗口。"""
 
-    def __init__(self, model: SettingsModel) -> None:
+    def __init__(self, model: SettingsModel, base_dir: Path | None = None) -> None:
         super().__init__()
         self._model = model
         self.setObjectName("SettingsWindow")
         self.setWindowTitle("ContextPilot 设置")
+        # 模型配置与项目索引用到的存储实例（base_dir 便于测试隔离）
+        self._profile_store = ProfileStore(base_dir=base_dir)
+        self._project_store = ProjectStore(base_dir=base_dir)
+        self._indexer = Indexer(base_dir=base_dir)
         # 单页滚动布局：行最小内容宽 612（文字320+间距24+控件220+卡片边距48），
         # 加导航 180 与页边距 48 = 840，窗口最小宽度与之持平，保证内容完整显示。
         self.resize(860, 600)
@@ -187,11 +211,13 @@ class SettingsWindow(QWidget):
         content_layout.setContentsMargins(0, 0, 0, 0)
         content_layout.setSpacing(0)
 
-        # 顺序构建 5 个区块，记录每个区块 widget 供锚点定位
+        # 顺序构建 8 个区块，记录每个区块 widget 供锚点定位
         self._sections: list[QWidget] = []
         for title, builder in (
             ("通用", self._section_general),
             ("模型", self._section_model),
+            ("模型配置", self._section_profiles),
+            ("项目索引", self._section_projects),
             ("上下文", self._section_context),
             ("快捷键", self._section_hotkey),
             ("记忆", self._section_memory),
@@ -309,6 +335,243 @@ class SettingsWindow(QWidget):
         self._field_row(card, "API Key", "只保存在本机配置，不进版本库", self._text_input("apiKey", "", password=True))
         self._field_row(card, "模型名", "如 deepseek-chat / gpt-4o-mini", self._text_input("model", ""))
         self._field_row(card, "超时（秒）", "请求 LLM 的最长等待时间", self._spin_input("timeout", 5, 600, 5))
+
+    # ---------- 模型配置 CRUD ----------
+    def _section_profiles(self, layout: QVBoxLayout) -> None:
+        card = self._card(layout)
+        self._field_row(
+            card, "模型配置", "多套 OpenAI 兼容配置，启用其一生效；增删改查见下方列表",
+            QLabel(""),  # 占位右侧，说明文字已足够
+        )
+
+        # 新增表单（简化：一行内输入 name + 模型，其余字段默认；编辑/删除走列表）
+        add_row = QHBoxLayout()
+        add_row.setSpacing(12)
+        name_field = QLineEdit()
+        name_field.setPlaceholderText("配置名称")
+        add_row.addWidget(name_field, 1)
+        base_field = QLineEdit()
+        base_field.setPlaceholderText("Base URL")
+        add_row.addWidget(base_field, 2)
+        model_field = QLineEdit()
+        model_field.setPlaceholderText("模型 ID")
+        add_row.addWidget(model_field, 1)
+        key_field = QLineEdit()
+        key_field.setPlaceholderText("API Key")
+        key_field.setEchoMode(QLineEdit.EchoMode.Password)
+        add_row.addWidget(key_field, 1)
+        add_btn = QPushButton("新增")
+        add_btn.setObjectName("PrimaryButton")
+        add_btn.clicked.connect(
+            lambda: self._add_profile(name_field, base_field, model_field, key_field, layout)
+        )
+        add_row.addWidget(add_btn)
+        card.addLayout(add_row)
+
+        self._profile_list_card = self._card(layout)
+        self._refresh_profile_list()
+
+    def _add_profile(self, name_field, base_field, model_field, key_field, layout) -> None:
+        try:
+            self._profile_store.add(
+                name=name_field.text().strip(),
+                provider="openai",
+                base_url=base_field.text().strip(),
+                api_key=key_field.text().strip(),
+                model=model_field.text().strip(),
+                temperature=0.2,
+                max_tokens=6000,
+                enabled=False,
+            )
+            name_field.clear(); base_field.clear(); model_field.clear(); key_field.clear()
+        except ValueError as exc:
+            self._profile_error(str(exc), layout)
+        self._refresh_profile_list()
+
+    def _refresh_profile_list(self) -> None:
+        self._profile_list_card: QVBoxLayout
+        # 清空旧条目
+        while self._profile_list_card.count():
+            item = self._profile_list_card.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+
+        profiles = self._profile_store.list()
+        if not profiles:
+            empty = QLabel("暂无模型配置，请在上方添加")
+            empty.setObjectName("Desc")
+            self._profile_list_card.addWidget(empty)
+            return
+
+        for profile in profiles:
+            row = QHBoxLayout()
+            row.setSpacing(12)
+            text = QLabel(f"{profile.name} · {profile.model} · {profile.api_key}")
+            text.setObjectName("Desc")
+            text.setWordWrap(True)
+            row.addWidget(text, 1)
+
+            if not profile.enabled:
+                enable_btn = QPushButton("启用")
+                enable_btn.setObjectName("PrimaryButton")
+                enable_btn.clicked.connect(
+                    lambda _=False, pid=profile.id: self._enable_profile(pid)
+                )
+                row.addWidget(enable_btn)
+            else:
+                active = QLabel("生效中")
+                active.setObjectName("Desc")
+                row.addWidget(active)
+
+            delete_btn = QPushButton("删除")
+            delete_btn.setObjectName("DangerButton")
+            delete_btn.clicked.connect(
+                lambda _=False, pid=profile.id: self._delete_profile(pid)
+            )
+            row.addWidget(delete_btn)
+            self._profile_list_card.addLayout(row)
+
+    def _enable_profile(self, profile_id: str) -> None:
+        self._profile_store.set_enabled(profile_id, True)
+        self._refresh_profile_list()
+
+    def _delete_profile(self, profile_id: str) -> None:
+        self._profile_store.delete(profile_id)
+        self._refresh_profile_list()
+
+    def _profile_error(self, message: str, layout) -> None:
+        err = QLabel(message)
+        err.setObjectName("Desc")
+        err.setStyleSheet("color: #DC2626;")
+        layout.addWidget(err)
+        # 3 秒后移除
+        from PySide6.QtCore import QTimer
+
+        QTimer.singleShot(3000, err.deleteLater)
+
+    # ---------- 项目索引 ----------
+    def _section_projects(self, layout: QVBoxLayout) -> None:
+        card = self._card(layout)
+        self._field_row(
+            card, "项目索引", "添加本地文件夹路径，手动触发索引；状态实时展示",
+            QLabel(""),
+        )
+
+        add_row = QHBoxLayout()
+        add_row.setSpacing(12)
+        path_field = QLineEdit()
+        path_field.setPlaceholderText("D:/your/project（绝对路径）")
+        add_row.addWidget(path_field, 1)
+        add_btn = QPushButton("添加")
+        add_btn.setObjectName("PrimaryButton")
+        add_btn.clicked.connect(lambda: self._add_project(path_field, layout))
+        add_row.addWidget(add_btn)
+        card.addLayout(add_row)
+
+        self._project_list_card = self._card(layout)
+        self._refresh_project_list()
+
+    def _add_project(self, path_field, layout) -> None:
+        path = path_field.text().strip()
+        if not path:
+            self._project_error("请输入项目路径", layout)
+            return
+        from pathlib import Path
+
+        if not Path(path).exists():
+            self._project_error("路径不存在", layout)
+            return
+        self._project_store.add(path)
+        path_field.clear()
+        self._refresh_project_list()
+
+    def _refresh_project_list(self) -> None:
+        while self._project_list_card.count():
+            item = self._project_list_card.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+
+        entries = self._project_store.list()
+        if not entries:
+            empty = QLabel("暂无项目，请在上方添加文件夹路径")
+            empty.setObjectName("Desc")
+            self._project_list_card.addWidget(empty)
+            return
+
+        for entry in entries:
+            row = QHBoxLayout()
+            row.setSpacing(12)
+            status_text = {
+                "pending": "未创建",
+                "running": "创建中",
+                "done": "已完成",
+                "failed": "失败",
+            }.get(entry.index_status, entry.index_status)
+            label = QLabel(f"{entry.name}  [{status_text}]  {entry.path}")
+            label.setObjectName("Desc")
+            label.setWordWrap(True)
+            row.addWidget(label, 1)
+            if entry.error:
+                err = QLabel(entry.error)
+                err.setObjectName("Desc")
+                err.setStyleSheet("color: #DC2626;")
+                row.addWidget(err)
+
+            if entry.index_status != STATUS_RUNNING:
+                index_btn = QPushButton("创建索引")
+                index_btn.setObjectName("PrimaryButton")
+                index_btn.clicked.connect(
+                    lambda _=False, eid=entry.id: self._index_project(eid)
+                )
+                row.addWidget(index_btn)
+
+            delete_btn = QPushButton("删除")
+            delete_btn.setObjectName("DangerButton")
+            delete_btn.clicked.connect(
+                lambda _=False, eid=entry.id: self._delete_project(eid)
+            )
+            row.addWidget(delete_btn)
+            self._project_list_card.addLayout(row)
+
+    def _index_project(self, entry_id: str) -> None:
+        """后台线程执行索引，避免阻塞 UI；完成后刷新列表。"""
+        from PySide6.QtCore import QThread
+
+        entry = self._project_store.get(entry_id)
+        if entry is None:
+            return
+
+        class IndexWorker(QThread):
+            def run(self):
+                result = self._indexer.build(self._entry, self._store)
+                self._result = result
+
+        worker = IndexWorker()
+        worker._indexer = self._indexer
+        worker._entry = entry
+        worker._store = self._project_store
+        worker.finished.connect(self._refresh_project_list)
+        worker.start()
+        # 持有引用防 GC
+        if not hasattr(self, "_index_workers"):
+            self._index_workers = []
+        self._index_workers.append(worker)
+        worker.finished.connect(lambda: self._index_workers.remove(worker))
+        self._project_store.set_status(entry_id, STATUS_RUNNING)
+        self._refresh_project_list()
+
+    def _delete_project(self, entry_id: str) -> None:
+        self._project_store.delete(entry_id)
+        self._refresh_project_list()
+
+    def _project_error(self, message: str, layout) -> None:
+        err = QLabel(message)
+        err.setObjectName("Desc")
+        err.setStyleSheet("color: #DC2626;")
+        layout.addWidget(err)
+        from PySide6.QtCore import QTimer
+
+        QTimer.singleShot(3000, err.deleteLater)
 
     def _section_context(self, layout: QVBoxLayout) -> None:
         card = self._card(layout)

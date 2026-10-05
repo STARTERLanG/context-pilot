@@ -14,6 +14,7 @@ from context_pilot.config import Config, load as load_config
 from context_pilot.core.pipeline import Pipeline
 from context_pilot.memory.retriever import MemoryRetriever
 from context_pilot.memory.store import MemoryStore
+from context_pilot.models.profiles import ProfileStore
 from context_pilot.optimizer.openai_provider import OpenAiProvider
 from context_pilot.optimizer.provider import LlmProvider, StubProvider
 from context_pilot.platform.clipboard import read_clipboard_text, write_clipboard_text
@@ -41,6 +42,10 @@ def _handle_close(state: dict, app: QApplication) -> None:
 
 def _build_provider(config: Config) -> LlmProvider:
     if config.llm.provider == "openai":
+        # 优先用模型配置库中启用的配置；无则回退旧字段
+        profile_store = ProfileStore()
+        if profile_store.list_enabled():
+            return OpenAiProvider(profile_store=profile_store, timeout=config.llm.timeout)
         return OpenAiProvider(
             base_url=config.llm.base_url,
             api_key=config.llm.api_key,

@@ -37,7 +37,7 @@ def test_enhance_returns_content(monkeypatch):
 
 def test_enhance_without_api_key_raises():
     provider = OpenAiProvider("https://x/v1", "", "m")
-    with pytest.raises(ProviderError, match="API Key"):
+    with pytest.raises(ProviderError, match="未配置"):
         asyncio.run(provider.enhance("x"))
 
 
