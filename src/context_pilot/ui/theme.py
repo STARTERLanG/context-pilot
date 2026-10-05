@@ -2,31 +2,33 @@
 
 作为 QVariantMap 注入 QML 的 `theme` 上下文属性，全界面与所有组件共用同一套
 取值，避免颜色和间距散落在各文件里。改主题只改这一处。
+
+统一基准：浅色 + teal 强调色，与 settings_style.py（QWidget 设置界面）对齐。
+层次由浅到深：background(最浅) < surface(卡片白) < surfaceHover < surfaceActive。
 """
 
-# 深色中性灰阶 + 单一强调色。层次由深到浅：background < surface < surfaceHover。
 THEME: dict = {
     # 背景层次
-    "background": "#0E0F12",
-    "surface": "#15171C",
-    "surfaceHover": "#1B1E24",
-    "surfaceActive": "#22262E",
+    "background": "#F9FAFB",
+    "surface": "#FFFFFF",
+    "surfaceHover": "#F3F4F6",
+    "surfaceActive": "#E5E7EB",
     # 边框
-    "border": "#242830",
-    "borderStrong": "#343A46",
-    # 强调色
-    "accent": "#5B8CFF",
-    "accentHover": "#6E9AFF",
-    "accentSoft": "#1E2740",
+    "border": "#E5E7EB",
+    "borderStrong": "#D1D5DB",
+    # 强调色（teal，与设置界面一致）
+    "accent": "#0D9488",
+    "accentHover": "#0F766E",
+    "accentSoft": "#CCFBF1",
     # 文字
-    "textPrimary": "#ECEDEF",
-    "textSecondary": "#9CA2AD",
-    "textMuted": "#666C78",
-    "textInverse": "#0E0F12",
+    "textPrimary": "#111827",
+    "textSecondary": "#6B7280",
+    "textMuted": "#9CA3AF",
+    "textInverse": "#FFFFFF",
     # 语义色
-    "success": "#4ADE80",
-    "warning": "#FBBF24",
-    "danger": "#F87171",
+    "success": "#16A34A",
+    "warning": "#D97706",
+    "danger": "#DC2626",
     # 圆角
     "radiusSm": 6,
     "radiusMd": 8,
@@ -45,6 +47,6 @@ THEME: dict = {
     "fontSubtitle": 15,
     "fontTitle": 20,
     # 字体
-    "fontFamily": "Segoe UI",
+    "fontFamily": "Microsoft YaHei UI",
     "fontMono": "Cascadia Code",
 }

@@ -2,7 +2,12 @@
 
 只读展示 + 动作槽，用 setContextProperty 注入。Diff 与 token 统计在
 Python 侧算好（core/diff、core/tokens），QML 只负责渲染。
+
+历史记录为会话级（内存态）：记录每次增强的原始指令与增强结果，供
+「历史记录」按钮回看；进程重启即清空，不落盘。
 """
+
+from datetime import datetime
 
 from PySide6.QtCore import Property, QObject, Signal, Slot
 
@@ -62,6 +67,8 @@ class PreviewModel(QObject):
         self._token_stats: dict = {"original": 0, "context": 0, "enhanced": 0, "total": 0}
         self._diff_rows: list[dict] = []
         self._context_rows: list[dict] = []
+        # 会话级历史：[(时间戳, 原始指令, 增强结果), ...]，新条目在前
+        self._history: list[dict] = []
 
     def _get_original(self) -> str:
         return self._original
@@ -84,6 +91,9 @@ class PreviewModel(QObject):
     def _get_context_rows(self) -> list[dict]:
         return self._context_rows
 
+    def _get_history(self) -> list[dict]:
+        return self._history
+
     originalPrompt = Property(str, _get_original, notify=changed)
     enhancedPrompt = Property(str, _get_enhanced, notify=changed)
     contextFiles = Property("QVariantList", _get_context, notify=changed)
@@ -91,6 +101,7 @@ class PreviewModel(QObject):
     tokenStats = Property("QVariantMap", _get_token_stats, notify=changed)
     diffRows = Property("QVariantList", _get_diff_rows, notify=changed)
     contextRows = Property("QVariantList", _get_context_rows, notify=changed)
+    history = Property("QVariantList", _get_history, notify=changed)
 
     def begin(self, prompt: str) -> None:
         """开始一次增强：清空旧结果，显示原 prompt。"""
@@ -111,6 +122,7 @@ class PreviewModel(QObject):
         self._token_stats = _token_stats(result)
         self._diff_rows = _diff_rows(result.original_prompt, result.enhanced_prompt)
         self._context_rows = _context_rows(result.context)
+        self._record_history(result.original_prompt, result.enhanced_prompt)
         self.changed.emit()
 
     def set_failed(self, message: str) -> None:
@@ -119,6 +131,15 @@ class PreviewModel(QObject):
 
     def set_adapter(self, adapter: AgentAdapter) -> None:
         self._adapter = adapter
+
+    def _record_history(self, original: str, enhanced: str) -> None:
+        """追加一条历史记录（会话级，重启清空）。"""
+        stamp = datetime.now().strftime("%H:%M:%S")
+        self._history.insert(0, {
+            "time": stamp,
+            "original": original,
+            "enhanced": enhanced,
+        })
 
     @Slot(str)
     def use(self, text: str) -> None:

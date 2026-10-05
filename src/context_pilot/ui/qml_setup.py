@@ -8,6 +8,7 @@ from pathlib import Path
 
 from PySide6.QtCore import QUrl
 from PySide6.QtQuick import QQuickView
+from PySide6.QtQuickControls2 import QQuickStyle
 
 from context_pilot.ui.theme import THEME
 
@@ -16,6 +17,12 @@ QML_DIR = Path(__file__).parent / "qml"
 
 def configure(view: QQuickView) -> None:
     """给视图的 QML 引擎加上组件导入路径与主题属性。"""
+    # 强制使用 Fusion（非原生）样式：Windows 原生样式不允许自定义控件
+    # 的 contentItem（如 ScrollBar），会触发 "does not support customization"
+    # 告警。Fusion 跨平台一致，且本项目 UI 全部基于自绘 + theme 令牌，
+    # 不依赖原生外观，切样式不会改变视觉。必须在加载任何 QML 之前设置。
+    QQuickStyle.setStyle("Fusion")
+
     engine = view.engine()
     engine.addImportPath(str(QML_DIR))
     view.rootContext().setContextProperty("theme", THEME)

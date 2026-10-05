@@ -31,7 +31,7 @@ Item {
                 width: 16
                 height: 16
                 radius: theme.radiusFull
-                color: "#FFFFFF"
+                color: theme.surface
                 y: 2
                 x: root.checked ? track.width - width - 3 : 3
                 Behavior on x { NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }

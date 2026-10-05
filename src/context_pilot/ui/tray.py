@@ -4,14 +4,16 @@ from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QColor, QFont, QIcon, QPainter, QPixmap
 from PySide6.QtWidgets import QMenu, QSystemTrayIcon
 
+from context_pilot.ui.icon import app_icon
+
 
 def _make_icon() -> QIcon:
-    """程序化生成图标，省掉二进制资源文件与路径问题。"""
+    """兜底程序化图标（资源文件缺失时使用）：teal 圆角方块 + 白色 CP。"""
     pixmap = QPixmap(64, 64)
     pixmap.fill(Qt.GlobalColor.transparent)
     painter = QPainter(pixmap)
     painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-    painter.setBrush(QColor("#4c8dff"))
+    painter.setBrush(QColor("#0D9488"))
     painter.setPen(Qt.PenStyle.NoPen)
     painter.drawRoundedRect(4, 4, 56, 56, 14, 14)
     painter.setPen(QColor("#ffffff"))
@@ -24,13 +26,18 @@ def _make_icon() -> QIcon:
     return QIcon(pixmap)
 
 
+def _tray_icon() -> QIcon:
+    icon = app_icon()
+    return icon if not icon.isNull() else _make_icon()
+
+
 class Tray(QSystemTrayIcon):
     showRequested = Signal()
     settingsRequested = Signal()
     quitRequested = Signal()
 
     def __init__(self, parent=None) -> None:
-        super().__init__(_make_icon(), parent)
+        super().__init__(_tray_icon(), parent)
         self.setToolTip("ContextPilot")
 
         menu = QMenu()

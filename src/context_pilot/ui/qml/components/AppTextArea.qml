@@ -35,6 +35,22 @@ Rectangle {
             selectedTextColor: theme.textInverse
         }
 
-        ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
+        ScrollBar.vertical: ScrollBar {
+            id: vbar
+            policy: ScrollBar.AsNeeded
+            interactive: true                 // 移动端可触摸拖拽
+            width: 6
+            contentItem: Rectangle {
+                // 宽度跟随 ScrollBar（6px），不写 implicitWidth 以避免
+                // [undefined] to int 告警；仅保留视觉属性
+                radius: 3
+                color: vbar.pressed ? theme.accentHover
+                     : vbar.hovered ? theme.accent
+                     : theme.borderStrong
+                opacity: vbar.pressed || vbar.hovered || vbar.active ? 1.0 : 0.6
+                Behavior on color { ColorAnimation { duration: 100 } }
+                Behavior on opacity { NumberAnimation { duration: 100 } }
+            }
+        }
     }
 }

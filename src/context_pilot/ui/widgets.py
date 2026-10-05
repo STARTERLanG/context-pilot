@@ -27,13 +27,13 @@ class Card(QFrame):
 
 
 class ToggleSwitch(QAbstractButton):
-    """iOS 风格开关：手绘轨道与滑块，开启态青绿色 #14B8A6。"""
+    """iOS 风格开关：手绘轨道与滑块，开启态 teal #0D9488（与 QML AppToggle 一致，40×22）。"""
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
         self.setCheckable(True)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.setFixedSize(44, 24)
+        self.setFixedSize(40, 22)
 
     def paintEvent(self, event) -> None:
         painter = QPainter(self)
@@ -41,13 +41,13 @@ class ToggleSwitch(QAbstractButton):
         width, height = self.width(), self.height()
 
         on = self.isChecked()
-        track_color = QColor("#3B82F6") if on else QColor("#E5E7EB")
+        track_color = QColor("#0D9488") if on else QColor("#E5E7EB")
         painter.setPen(Qt.PenStyle.NoPen)
         painter.setBrush(track_color)
         painter.drawRoundedRect(0, 0, width, height, height // 2, height // 2)
 
         knob = QColor("#FFFFFF")
-        padding = 2
+        padding = 3
         diameter = height - padding * 2
         x = width - diameter - padding if on else padding
         painter.setBrush(knob)
@@ -74,14 +74,15 @@ class ArrowComboBox(QComboBox):
         painter = QStylePainter(self)
         painter.drawComplexControl(QStyle.ComplexControl.CC_ComboBox, option)
 
+        # 与 QSS ::down-arrow 定位对齐：right:10px + width:12px → 区域中心距右缘 16px
         rect = self.rect()
-        arrow_x = rect.right() - 18
-        arrow_y = rect.center().y()
+        center_x = rect.right() - 15  # right() = width-1，故中心 = width-16
+        center_y = rect.center().y()
         pen = QPen(QColor("#6B7280"), 2)
         pen.setCapStyle(Qt.PenCapStyle.RoundCap)
         painter.setPen(pen)
-        painter.drawLine(arrow_x - 4, arrow_y - 2, arrow_x, arrow_y + 2)
-        painter.drawLine(arrow_x, arrow_y + 2, arrow_x + 4, arrow_y - 2)
+        painter.drawLine(center_x - 4, center_y - 2, center_x, center_y + 2)
+        painter.drawLine(center_x, center_y + 2, center_x + 4, center_y - 2)
 
 
 class HotkeyEdit(QLineEdit):

@@ -21,6 +21,7 @@ from context_pilot.platform.hotkey import GlobalHotkey, HotkeyRegistrationError
 from context_pilot.platform.single_instance import SingleInstance
 from context_pilot.retrieval.base import Retriever
 from context_pilot.retrieval.keyword import KeywordRetriever
+from context_pilot.ui.icon import app_icon
 from context_pilot.ui.preview_model import PreviewModel
 from context_pilot.ui.preview_window import PreviewWindow
 from context_pilot.ui.settings_model import SettingsModel
@@ -70,6 +71,8 @@ def _build_adapter(config: Config) -> AgentAdapter:
 def main() -> int:
     app = QApplication(sys.argv)
     app.setApplicationName("ContextPilot")
+    # 全局窗口图标：任务栏 / Alt-Tab / 设置窗标题栏共用
+    app.setWindowIcon(app_icon())
     # 关掉预览窗只是隐藏，进程继续驻留托盘
     app.setQuitOnLastWindowClosed(False)
 

@@ -1,11 +1,11 @@
 import QtQuick
 
 // 统一按钮。variant: primary(实心强调) / secondary(描边) / ghost(无底) / danger
+// 注意：不声明 enabled，直接复用基类 Item.enabled，避免覆盖基类成员告警。
 Rectangle {
     id: root
     property string text: ""
     property string variant: "secondary"
-    property bool enabled: true
     signal clicked()
 
     implicitWidth: label.implicitWidth + theme.spaceLg * 2
@@ -18,7 +18,7 @@ Rectangle {
     color: {
         if (!enabled) return variant === "primary" ? theme.accent : theme.surface
         if (variant === "primary") return hover.hovered ? theme.accentHover : theme.accent
-        if (variant === "danger") return hover.hovered ? "#FF8A8A" : theme.danger
+        if (variant === "danger") return hover.hovered ? "#EF4444" : theme.danger
         if (variant === "ghost") return hover.hovered ? theme.surfaceHover : "transparent"
         return hover.hovered ? theme.surfaceHover : theme.surface
     }
