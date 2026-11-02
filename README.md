@@ -9,7 +9,7 @@
 （如「修一下订单接口」）重构为项目感知、可执行、可验证的工程任务 Prompt。
 
 [![Python](https://img.shields.io/badge/Python-3.12%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
-[![Version](https://img.shields.io/badge/version-0.0.1-blue)](https://github.com/yourname/context-pilot/releases)
+[![Version](https://img.shields.io/badge/version-0.0.1-blue)](https://github.com/STARTERLanG/context-pilot/releases)
 [![License](https://img.shields.io/badge/license-MIT-green)](#license)
 [![Platform](https://img.shields.io/badge/platform-Windows-0078D6?logo=windows)](https://www.microsoft.com/windows)
 
@@ -48,7 +48,7 @@ ContextPilot 会自动完成这一层工程化，让 Coding Agent 收到的是�
 
 ```bash
 # 1. 克隆仓库
-git clone https://github.com/yourname/context-pilot.git
+git clone https://github.com/STARTERLanG/context-pilot.git
 cd context-pilot
 
 # 2. 安装依赖
