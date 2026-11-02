@@ -8,6 +8,7 @@
 **Context Engineering 层**：读取项目规则与代码，把一句简短的自然语言指令
 （如「修一下订单接口」）重构为项目感知、可执行、可验证的工程任务 Prompt。
 
+[![CI](https://github.com/STARTERLanG/context-pilot/actions/workflows/ci.yml/badge.svg)](https://github.com/STARTERLanG/context-pilot/actions/workflows/ci.yml)
 [![Python](https://img.shields.io/badge/Python-3.12%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![Version](https://img.shields.io/badge/version-0.0.1-blue)](https://github.com/STARTERLanG/context-pilot/releases)
 [![License](https://img.shields.io/badge/license-MIT-green)](#license)
