@@ -13,6 +13,7 @@ from pathlib import Path
 from context_pilot.core.models import ContextItem
 from context_pilot.project.models import ProjectContext
 from context_pilot.retrieval.ignore import is_ignored_dir, is_sensitive, is_text_candidate
+from context_pilot.retrieval.snippet import extract_snippet, find_matching_lines
 
 _TOKEN_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]{2,}")
 
@@ -94,6 +95,8 @@ class KeywordRetriever:
             score = _score(rel, text, tokens)
             if score <= 0:
                 continue
+            line_numbers = find_matching_lines(text, tokens)
+            snippet, start, end = extract_snippet(text, line_numbers)
             scored.append(
                 (
                     score,
@@ -105,6 +108,9 @@ class KeywordRetriever:
                         content=text[:_MAX_ITEM_CHARS],
                         relevance=score,
                         reason=_explain(rel, text, tokens),
+                        snippet=snippet,
+                        line_start=start,
+                        line_end=end,
                     ),
                 )
             )

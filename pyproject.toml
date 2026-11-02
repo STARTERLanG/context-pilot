@@ -16,6 +16,8 @@ context-pilot = "context_pilot.ui.app:main"
 [dependency-groups]
 dev = [
     "pytest>=8.0",
+    # 静态检查未定义名（NameError 只在运行到那行时才炸，compileall 抓不到）
+    "pyflakes>=3.2",
 ]
 
 [build-system]

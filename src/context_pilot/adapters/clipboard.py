@@ -4,7 +4,6 @@
 结构，用工厂函数生成，避免三个近乎一样的类。
 """
 
-from context_pilot.adapters.base import AgentAdapter
 from context_pilot.platform.clipboard import write_clipboard_text
 
 

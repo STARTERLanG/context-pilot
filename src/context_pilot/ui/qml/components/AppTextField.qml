@@ -8,6 +8,8 @@ Rectangle {
     property int echoMode: TextInput.Normal
     property bool readOnly: false
     signal editingFinished()
+    // 用户真正编辑过才发出（区别于程序赋值），供「未编辑则不写回」的判断
+    signal textEdited()
 
     implicitHeight: 36
     radius: theme.radiusMd
@@ -45,5 +47,6 @@ Rectangle {
         echoMode: root.echoMode
         clip: true
         onEditingFinished: root.editingFinished()
+        onTextEdited: root.textEdited()
     }
 }

@@ -65,7 +65,8 @@ def test_update_and_delete(tmp_path):
     assert store.get(profile.id) is None
 
 
-def test_set_enabled_single_effective(tmp_path):
+def test_set_enabled_allows_multiple_effective(tmp_path):
+    """生效是多选：勾选第二条不会取消第一条。"""
     store = _store(tmp_path)
     a = store.add(name="a", provider="openai", base_url="x", api_key="k",
                   model="m", temperature=0.2, max_tokens=1, enabled=False)
@@ -76,8 +77,11 @@ def test_set_enabled_single_effective(tmp_path):
     store.set_enabled(b.id, True)
 
     enabled = store.list_enabled()
-    assert len(enabled) == 1
-    assert enabled[0].id == b.id  # 只有一个生效，后者覆盖前者
+    assert [p.id for p in enabled] == [a.id, b.id]
+
+    # 单独取消一条，另一条不受影响
+    store.set_enabled(a.id, False)
+    assert [p.id for p in store.list_enabled()] == [b.id]
 
 
 def test_update_required_fields_empty_name_rejected(tmp_path):

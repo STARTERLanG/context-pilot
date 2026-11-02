@@ -18,10 +18,11 @@ Rectangle {
 
     HoverHandler { cursorShape: Qt.PointingHandCursor }
 
+    // 同理不在内部写 value：外部通常写 `value: xxx` 绑定，命令式赋值会冲掉
+    // 它。这里只把目标值抛给使用方，由使用方写回数据源再经绑定回来显示。
     function _apply(delta) {
         var next = Math.max(root.from, Math.min(root.to, root.value + delta))
         if (next !== root.value) {
-            root.value = next
             root.valueModified(next)
         }
     }
@@ -62,11 +63,9 @@ Rectangle {
                 onEditingFinished: {
                     var parsed = parseInt(text)
                     if (!isNaN(parsed)) {
-                        root.value = parsed
                         root.valueModified(parsed)
-                    } else {
-                        text = root.value
                     }
+                    text = root.value  // 无效输入或超出区间时回填实际值
                 }
             }
         }

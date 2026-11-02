@@ -49,9 +49,9 @@ Item {
 
     HoverHandler { cursorShape: Qt.PointingHandCursor }
     TapHandler {
-        onTapped: {
-            root.checked = !root.checked
-            root.toggled(root.checked)
-        }
+        // 不在内部写 checked：外部通常以 `checked: xxx` 声明式绑定使用它，
+        // 命令式赋值会把绑定冲掉、此后外部值变了也不再刷新。改为只抛意图
+        // （目标值），由使用方写回数据源，再经绑定回流到 checked。
+        onTapped: root.toggled(!root.checked)
     }
 }

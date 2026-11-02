@@ -2,10 +2,14 @@
 
 用 QQuickView 而非 QQmlApplicationEngine + Window 根对象：后者关闭即销毁，
 无法复用；QQuickView 是常驻 QWindow，反复 show()/hide() 安全。
+
+窗口内有两个页面（主页面 / 设置页）共享同一张卡片与同一矩形，Python 侧只
+负责切换 load 状态位；两个页面的 Item 都常驻，来回切换不会丢失输入与状态。
 """
 
 import ctypes
 from collections.abc import Callable
+from pathlib import Path
 
 from PySide6.QtCore import Property, QObject, Qt, Signal, Slot
 from PySide6.QtGui import QCloseEvent, QColor, QWindow
@@ -14,6 +18,10 @@ from PySide6.QtQuick import QQuickView
 from context_pilot.ui import qml_setup
 from context_pilot.ui.icon import app_icon
 from context_pilot.ui.preview_model import PreviewModel
+from context_pilot.ui.session_controller import SessionController
+from context_pilot.ui.settings_controller import SettingsController
+from context_pilot.ui.settings_model import SettingsModel
+from context_pilot.ui.shortcut_controller import ShortcutController
 
 
 class _CloseableQuickView(QQuickView):
@@ -92,7 +100,12 @@ class _WindowCtl(QObject):
 
 class PreviewWindow:
     def __init__(
-        self, model: PreviewModel, on_close: Callable[[], None] | None = None
+        self,
+        model: PreviewModel,
+        settings: SettingsModel | None = None,
+        session: SessionController | None = None,
+        base_dir: Path | None = None,
+        on_close: Callable[[], None] | None = None,
     ) -> None:
         self._on_close = on_close
         self._view = _CloseableQuickView(on_close)
@@ -114,8 +127,58 @@ class PreviewWindow:
         self._ctl = _WindowCtl(self._view)
         self._view.rootContext().setContextProperty("windowCtl", self._ctl)
         self._view.rootContext().setContextProperty("preview", model)
+        # 设置页：字段绑定 SettingsModel，列表动作走 SettingsController
+        self._settings = settings or SettingsModel()
+        # 主页面顶行的「项目 / 模型」选择：会话级状态，默认取当前配置
+        self._session_ctl = session or SessionController(
+            self._settings.config, base_dir=base_dir
+        )
+        # 设置控制器与主页面共享同一 StyleStore，增删改风格后两边同步
+        self._settings_ctl = SettingsController(
+            self._settings,
+            base_dir=base_dir,
+            style_store=self._session_ctl.style_store,
+        )
+        # 窗口内快捷键：与主窗口的 Shortcut 项直接绑定，设置页改完即时生效
+        self._shortcut_ctl = ShortcutController(self._settings)
+        self._view.rootContext().setContextProperty("settings", self._settings)
+        self._view.rootContext().setContextProperty("settingsCtl", self._settings_ctl)
+        self._view.rootContext().setContextProperty("sessionCtl", self._session_ctl)
+        self._view.rootContext().setContextProperty("shortcut_ctl", self._shortcut_ctl)
         self._view.setSource(qml_setup.source("PreviewWindow.qml"))
         qml_setup.check(self._view, "预览窗")
+
+    # ---------- 页面切换 ----------
+    @property
+    def session_ctl(self) -> SessionController:
+        return self._session_ctl
+
+    @property
+    def settings_ctl(self) -> SettingsController:
+        return self._settings_ctl
+
+    @property
+    def shortcut_ctl(self) -> ShortcutController:
+        return self._shortcut_ctl
+
+    def _set_root_flag(self, name: str, value: bool) -> None:
+        """写 QML 根对象属性（整体 bool 状态位），比 invokeMethod 更省一层包装。"""
+        root = self._view.rootObject()
+        if root is not None:
+            root.setProperty(name, value)
+
+    def open_settings(self) -> None:
+        """切到设置页；首次调用才实例化设置页 Item，之后常驻以保留页面内状态。"""
+        self._set_root_flag("settingsLoaded", True)
+        self._set_root_flag("settingsOpen", True)
+
+    def show_main_page(self) -> None:
+        """回到主页面：主页面 Item 全程未被销毁，内容与状态原样恢复。"""
+        self._set_root_flag("settingsOpen", False)
+
+    def is_settings_open(self) -> bool:
+        root = self._view.rootObject()
+        return bool(root.property("settingsOpen")) if root is not None else False
 
     def set_close_behavior(self, on_close: Callable[[], None]) -> None:
         self._on_close = on_close
@@ -133,3 +196,17 @@ class PreviewWindow:
 
     def hide(self) -> None:
         self._view.hide()
+
+    def is_visible(self) -> bool:
+        """窗口是否处于用户可见状态；最小化视为不可见（切换时应恢复显示）。"""
+        return (
+            self._view.isVisible()
+            and self._view.visibility() != QWindow.Visibility.Minimized
+        )
+
+    def toggle(self) -> None:
+        """显示 / 关闭切换：可见则隐藏，否则显示并激活（供切换热键调用）。"""
+        if self.is_visible():
+            self.hide()
+        else:
+            self.show_and_activate()

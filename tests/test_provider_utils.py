@@ -42,6 +42,33 @@ def test_fetch_models_no_key():
         fetch_models("https://x/v1", "")
 
 
+def test_fetch_models_timeout(monkeypatch):
+    """端点超时须抛「超时」文案的 ProviderError，而不是让线程一直挂住。"""
+
+    def fake_get(self, url, headers=None):
+        raise httpx.TimeoutException("timed out")
+
+    monkeypatch.setattr(httpx.Client, "get", fake_get)
+    with pytest.raises(ProviderError, match="超时"):
+        fetch_models("https://x/v1", "sk-1", timeout=1.0)
+
+
+def test_fetch_models_uses_default_timeout(monkeypatch):
+    """未显式传 timeout 时使用模块级默认超时（MODELS_FETCH_TIMEOUT）。"""
+    from context_pilot.optimizer.openai_provider import MODELS_FETCH_TIMEOUT
+
+    captured = {}
+
+    def fake_get(self, url, headers=None):
+        captured["url"] = url
+        return httpx.Response(200, json={"data": [{"id": "a"}]})
+
+    monkeypatch.setattr(httpx.Client, "get", fake_get)
+    # 不传 timeout，默认值应大于 0（有明确上限，不会无限等待）
+    assert MODELS_FETCH_TIMEOUT > 0
+    assert fetch_models("https://x/v1", "sk-1") == ["a"]
+
+
 def test_check_connection_success(monkeypatch):
     def fake_post(self, url, json=None, headers=None):
         assert url.endswith("/chat/completions")

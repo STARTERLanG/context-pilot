@@ -4,10 +4,10 @@
 纯生成逻辑，无外部依赖。
 """
 
-import os
 from pathlib import Path
 
 from context_pilot.project.models import ProjectContext
+from context_pilot.retrieval.ignore import IGNORED_DIRS
 
 
 def summarize(project: ProjectContext, max_depth: int = 3, max_entries: int = 40) -> str:
@@ -32,11 +32,12 @@ def summarize(project: ProjectContext, max_depth: int = 3, max_entries: int = 40
 def _structure_lines(
     root: Path, current: Path, max_depth: int, max_entries: int
 ) -> list[str]:
-    """返回目录树的关键行（跳过常见噪音目录）。"""
-    ignored = {
-        ".git", "node_modules", "dist", "build", "venv", ".venv",
-        "__pycache__", ".pytest_cache", ".ruff_cache", ".idea", ".vscode",
-    }
+    """返回目录树的关键行（跳过常见噪音目录）。
+
+    忽略名单复用 retrieval.ignore：此前这里手抄了一份且少了 target /
+    .mypy_cache，与索引器和检索器判定不一致（同一目录在三处表现不同）。
+    """
+    ignored = IGNORED_DIRS
     depth = len(current.relative_to(root).parts) if current != root else 0
     if depth > max_depth:
         return []

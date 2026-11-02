@@ -9,10 +9,13 @@ Rectangle {
     property int currentIndex: 0
     // 每段最小宽度，保证中文标签（如"增强结果"4 字）完整显示不重叠
     property int segmentMinWidth: 84
+    // 段与段之间的间距（可被宿主收紧，腾出空间给同行的主按钮）
+    property int segmentSpacing: 4
     signal activated(int index)
 
     implicitHeight: 38
-    implicitWidth: 8 + options.length * segmentMinWidth + (options.length - 1) * 4
+    implicitWidth: 8 + options.length * segmentMinWidth
+                 + (options.length - 1) * segmentSpacing
 
     color: theme.surface
     radius: theme.radiusMd
@@ -23,7 +26,7 @@ Rectangle {
         id: row
         anchors.fill: parent
         anchors.margins: 4
-        spacing: 4
+        spacing: root.segmentSpacing
 
         Repeater {
             model: root.options

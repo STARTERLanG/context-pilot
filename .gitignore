@@ -10,6 +10,12 @@ venv/
 # 测试与工具缓存
 .pytest_cache/
 .ruff_cache/
+.mypy_cache/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+.dmypy.json
 
 # 密钥与本地配置
 .env
@@ -19,10 +25,37 @@ venv/
 credentials.*
 secrets.*
 
+# 本地数据库与运行数据
+*.db
+*.sqlite
+*.sqlite3
+
+# 日志
+*.log
+*.log.*
+
 # 构建产物
 dist/
 build/
 *.spec
+*.whl
+wheels/
+*.tar.gz
+
+# IDE / 编辑器
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
 
 # 第三方工具数据
 .workbuddy/
+
+# 个人配置与文档（仅上传代码，不上传文档/规则）
+.claude/
+CLAUDE.md
+ContextPilot.md
+PRD-gap-analysis.md
+docs/
+run.cmd

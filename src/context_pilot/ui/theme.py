@@ -3,7 +3,7 @@
 作为 QVariantMap 注入 QML 的 `theme` 上下文属性，全界面与所有组件共用同一套
 取值，避免颜色和间距散落在各文件里。改主题只改这一处。
 
-统一基准：浅色 + teal 强调色，与 settings_style.py（QWidget 设置界面）对齐。
+统一基准：浅色 + teal 强调色，QML 界面（主页面 + 设置页）全部取自此处。
 层次由浅到深：background(最浅) < surface(卡片白) < surfaceHover < surfaceActive。
 """
 
@@ -29,6 +29,9 @@ THEME: dict = {
     "success": "#16A34A",
     "warning": "#D97706",
     "danger": "#DC2626",
+    # 告警/成功底色：比主色淡，用于标签背景，避免整块深背景压过正文
+    "dangerSoft": "#FEF2F2",
+    "successSoft": "#ECFDF5",
     # 圆角
     "radiusSm": 6,
     "radiusMd": 8,

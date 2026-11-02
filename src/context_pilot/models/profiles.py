@@ -24,12 +24,25 @@ CREATE TABLE IF NOT EXISTS model_profiles (
     base_url    TEXT NOT NULL,
     api_key     TEXT NOT NULL DEFAULT '',
     model       TEXT NOT NULL,
-    temperature REAL NOT NULL DEFAULT 0.2,
+    temperature REAL NOT NULL DEFAULT 1.0,
     max_tokens  INTEGER NOT NULL DEFAULT 6000,
     enabled     INTEGER NOT NULL DEFAULT 0,
     created_at  TEXT NOT NULL
 )
 """
+
+# 应用级小状态（键值对）。与模型配置同库存放：增强目标是指向 model_profiles 的
+# 一个 id，放这里天然同生共死；若写进 config.toml，则会与设置页的整文件重写
+# 抢同一个文件（SettingsModel 持有自己的配置副本，保存时会把别处写的字段覆盖掉）。
+_STATE_SCHEMA = """
+CREATE TABLE IF NOT EXISTS app_state (
+    key   TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+)
+"""
+
+# app_state 里的键：上次明确选定的增强目标
+SELECTED_MODEL_KEY = "selected_model_id"
 
 
 def _mask(key: str) -> str:
@@ -67,7 +80,7 @@ class ModelProfile:
     base_url: str = ""
     api_key: str = ""  # 脱敏后的展示值
     model: str = ""
-    temperature: float = 0.2
+    temperature: float = 1.0
     max_tokens: int = 6000
     enabled: bool = False
     created_at: str = ""
@@ -81,6 +94,7 @@ class ProfileStore:
         self._path.parent.mkdir(parents=True, exist_ok=True)
         with closing(self._connect()) as conn, conn:
             conn.execute(_SCHEMA)
+            conn.execute(_STATE_SCHEMA)
 
     @property
     def path(self) -> Path:
@@ -103,7 +117,7 @@ class ProfileStore:
         return [self._row_to_profile(row) for row in rows]
 
     def list_enabled(self) -> "list[ModelProfile]":
-        """启用的配置（按创建顺序）。调用方取第一个作为当前生效配置。"""
+        """已生效的配置（按创建顺序）。可多条同时生效，增强目标由用户单独选择。"""
         with closing(self._connect()) as conn:
             rows = conn.execute(
                 "SELECT * FROM model_profiles WHERE enabled = 1 ORDER BY created_at ASC"
@@ -211,14 +225,33 @@ class ProfileStore:
         return cursor.rowcount > 0
 
     def set_enabled(self, profile_id: str, enabled: bool) -> None:
-        """启用一个配置；若启用则先取消其他配置的启用（单一生效）。"""
+        """设置单条配置的生效状态；多条可同时生效（互不影响）。"""
         with closing(self._connect()) as conn, conn:
-            if enabled:
-                conn.execute("UPDATE model_profiles SET enabled = 0")
             conn.execute(
                 "UPDATE model_profiles SET enabled = ? WHERE id = ?",
                 (1 if enabled else 0, profile_id),
             )
+
+    # ---------- 应用级状态 ----------
+    def get_state(self, key: str) -> str:
+        """读取一个应用级状态值；不存在返回空串。"""
+        with closing(self._connect()) as conn:
+            row = conn.execute(
+                "SELECT value FROM app_state WHERE key = ?", (key,)
+            ).fetchone()
+        return str(row["value"]) if row else ""
+
+    def set_state(self, key: str, value: str) -> None:
+        """写入应用级状态；空串等价于清除（不留一条空记录）。"""
+        with closing(self._connect()) as conn, conn:
+            if value:
+                conn.execute(
+                    "INSERT INTO app_state (key, value) VALUES (?, ?)"
+                    " ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                    (key, value),
+                )
+            else:
+                conn.execute("DELETE FROM app_state WHERE key = ?", (key,))
 
     def reveal_key_by_id(self, profile_id: str) -> str:
         """仅供 Provider 内部调用：按 id 取回明文 key。脱敏展示值无法还原。"""

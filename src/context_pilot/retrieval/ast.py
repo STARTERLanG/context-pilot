@@ -15,6 +15,7 @@ import tree_sitter_python as tsp
 from context_pilot.core.models import ContextItem
 from context_pilot.project.models import ProjectContext
 from context_pilot.retrieval.ignore import is_ignored_dir, is_sensitive
+from context_pilot.retrieval.snippet import extract_snippet
 
 _MAX_SYMBOLS_PER_FILE = 200
 _MAX_ITEM_CHARS = 4000
@@ -44,9 +45,11 @@ class AstRetriever:
     def __init__(self) -> None:
         self._parser = Parser(Language(tsp.language()))
         self._cursor = QueryCursor(_PY_QUERY)
-        self._cache: dict[Path, list[str]] = {}
+        # 缓存符号名 -> 定义行号（1 起）
+        self._cache: dict[Path, list[tuple[str, int]]] = {}
 
-    def _symbols(self, path: Path) -> list[str]:
+    def _symbols(self, path: Path) -> list[tuple[str, int]]:
+        """返回 [(符号名, 定义起始行号)]，行号 1 起。"""
         if path in self._cache:
             return self._cache[path]
         try:
@@ -55,12 +58,15 @@ class AstRetriever:
             return []
         tree = self._parser.parse(source)
         captures = self._cursor.captures(tree.root_node)
-        symbols = [
-            source[node.start_byte:node.end_byte].decode("utf-8", errors="replace")
-            for name, nodes in captures.items()
-            for node in nodes
-            if name == "symbol"
-        ][:_MAX_SYMBOLS_PER_FILE]
+        symbols: list[tuple[str, int]] = []
+        for name, nodes in captures.items():
+            if name != "symbol":
+                continue
+            for node in nodes[:_MAX_SYMBOLS_PER_FILE]:
+                symbol = source[node.start_byte:node.end_byte].decode("utf-8", errors="replace")
+                # 符号定义行的起点：node 的 start_point[0] + 1
+                line = node.start_point[0] + 1
+                symbols.append((symbol, line))
         self._cache[path] = symbols
         return symbols
 
@@ -81,13 +87,15 @@ class AstRetriever:
                 symbols = self._symbols(path)
                 if not symbols:
                     continue
-                matched = [s for s in symbols if _symbol_matches(query, s)]
+                matched = [(s, ln) for s, ln in symbols if _symbol_matches(query, s)]
                 if not matched:
                     continue
                 try:
                     content = path.read_text(encoding="utf-8", errors="replace")
                 except OSError:
                     continue
+                matched_lines = [ln for _, ln in matched]
+                snippet, start, end = extract_snippet(content, matched_lines)
                 rel_posix = rel.as_posix()
                 items.append(
                     ContextItem(
@@ -97,7 +105,10 @@ class AstRetriever:
                         path=rel_posix,
                         content=content[:_MAX_ITEM_CHARS],
                         relevance=float(len(matched)),
-                        reason="AST 符号命中：" + "、".join(matched[:5]),
+                        reason="AST 符号命中：" + "、".join(s for s, _ in matched[:5]),
+                        snippet=snippet,
+                        line_start=start,
+                        line_end=end,
                     )
                 )
         items.sort(key=lambda item: item.relevance, reverse=True)

@@ -16,7 +16,6 @@ from context_pilot.platform.keys import MOD_NOREPEAT, format as format_hotkey, p
 WM_HOTKEY = 0x0312
 ERROR_HOTKEY_ALREADY_REGISTERED = 1409
 
-_HOTKEY_ID = 1
 _NATIVE_MSG_TYPE = b"windows_generic_MSG"
 
 
@@ -29,14 +28,17 @@ class HotkeyRegistrationError(RuntimeError):
 
 
 class _HotkeyEventFilter(QAbstractNativeEventFilter):
-    def __init__(self, on_pressed) -> None:
+    """按 hotkey_id 过滤 WM_HOTKEY：多个 GlobalHotkey 共用同一个消息泵。"""
+
+    def __init__(self, on_pressed, hotkey_id: int) -> None:
         super().__init__()
         self._on_pressed = on_pressed
+        self._hotkey_id = hotkey_id
 
     def nativeEventFilter(self, event_type, message):
         if event_type == _NATIVE_MSG_TYPE:
             msg = ctypes.cast(int(message), ctypes.POINTER(wintypes.MSG)).contents
-            if msg.message == WM_HOTKEY and msg.wParam == _HOTKEY_ID:
+            if msg.message == WM_HOTKEY and msg.wParam == self._hotkey_id:
                 self._on_pressed()
                 return True, 0
         return False, 0
@@ -47,11 +49,19 @@ class GlobalHotkey(QObject):
 
     pressed = Signal()
 
-    def __init__(self, sequence: str = "ctrl+shift+e", parent: QObject | None = None) -> None:
+    def __init__(
+        self,
+        sequence: str = "ctrl+shift+e",
+        parent: QObject | None = None,
+        *,
+        hotkey_id: int = 1,
+    ) -> None:
+        """hotkey_id 为 RegisterHotKey 的 id，同一进程的多个热键必须互不相同。"""
         super().__init__(parent)
         self._sequence = sequence
+        self._hotkey_id = hotkey_id
         self._user32 = ctypes.WinDLL("user32", use_last_error=True)
-        self._filter = _HotkeyEventFilter(self.pressed.emit)
+        self._filter = _HotkeyEventFilter(self.pressed.emit, hotkey_id)
         # 宿主窗口常驻且不可见：热键需要稳定的原生窗口句柄，
         # 不能绑在会被销毁的预览窗上。不 show() 也会分配句柄。
         self._host = QWidget()
@@ -78,7 +88,7 @@ class GlobalHotkey(QObject):
         hwnd = int(self._host.winId())
         ok = self._user32.RegisterHotKey(
             wintypes.HWND(hwnd),
-            _HOTKEY_ID,
+            self._hotkey_id,
             modifiers | MOD_NOREPEAT,
             vk,
         )
@@ -105,5 +115,5 @@ class GlobalHotkey(QObject):
         app = QApplication.instance()
         if app is not None:
             app.removeNativeEventFilter(self._filter)
-        self._user32.UnregisterHotKey(wintypes.HWND(int(self._host.winId())), _HOTKEY_ID)
+        self._user32.UnregisterHotKey(wintypes.HWND(int(self._host.winId())), self._hotkey_id)
         self._registered = False
