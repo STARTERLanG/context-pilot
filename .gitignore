@@ -17,13 +17,34 @@ coverage.xml
 htmlcov/
 .dmypy.json
 
-# 密钥与本地配置
+# 密钥与本地配置（与 retrieval/ignore.py 的 SENSITIVE_PATTERNS 保持一致）
 .env
 .env.*
+.npmrc
+.yarnrc
+.netrc
+.dockercfg
+.htpasswd
 *.pem
 *.key
-credentials.*
-secrets.*
+*.pfx
+*.p12
+*.jks
+*.keystore
+*.ppk
+*.kdbx
+*.gpg
+*.asc
+id_rsa*
+id_dsa*
+id_ecdsa*
+id_ed25519*
+credential*
+secret*
+private_key*
+service-account*
+service_account*
+token.json
 
 # 本地数据库与运行数据
 *.db

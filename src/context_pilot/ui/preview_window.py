@@ -8,6 +8,7 @@
 """
 
 import ctypes
+import sys
 from collections.abc import Callable
 from pathlib import Path
 
@@ -188,11 +189,13 @@ class PreviewWindow:
         self._view.show()
         self._view.raise_()
         self._view.requestActivate()
-        # Windows 前景锁可能拒绝 activate，用 Win32 兜底
-        try:
-            ctypes.windll.user32.SetForegroundWindow(int(self._view.winId()))
-        except OSError:
-            pass
+        # Windows 前景锁可能拒绝 activate，用 Win32 兜底。
+        # ctypes.windll 仅存在于 Windows，非 Windows 上先判平台再访问属性。
+        if sys.platform == "win32":
+            try:
+                ctypes.windll.user32.SetForegroundWindow(int(self._view.winId()))
+            except (OSError, AttributeError):
+                pass
 
     def hide(self) -> None:
         self._view.hide()

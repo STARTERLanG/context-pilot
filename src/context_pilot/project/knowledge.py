@@ -7,7 +7,7 @@
 from pathlib import Path
 
 from context_pilot.project.models import ProjectContext
-from context_pilot.retrieval.ignore import IGNORED_DIRS
+from context_pilot.retrieval.ignore import IGNORED_DIRS, is_sensitive
 
 
 def summarize(project: ProjectContext, max_depth: int = 3, max_entries: int = 40) -> str:
@@ -62,7 +62,7 @@ def _structure_lines(
             lines.append(f"{indent}{entry.name}/")
             lines.extend(_structure_lines(root, entry, max_depth, max_entries))
         else:
-            if entry.suffix in (".pyc", ".pyo"):
+            if entry.suffix in (".pyc", ".pyo") or is_sensitive(entry):
                 continue
             indent = "  " * depth
             lines.append(f"{indent}{entry.name}")

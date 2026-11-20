@@ -3,7 +3,7 @@
 import pytest
 from PySide6.QtCore import QCoreApplication
 
-from context_pilot.core.models import ContextItem, EnhancedPrompt
+from context_pilot.core.models import EnhancedPrompt
 from context_pilot.ui.preview_model import PreviewModel
 
 

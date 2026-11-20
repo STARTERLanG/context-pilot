@@ -1,8 +1,5 @@
 """Code Graph 单测。"""
 
-import tempfile
-from pathlib import Path
-
 from context_pilot.graph.builder import CodeGraphBuilder
 from context_pilot.graph.models import GraphEdge
 from context_pilot.graph.retriever import GraphRetriever
@@ -59,3 +56,25 @@ def test_graph_retriever_expands_inheritance(tmp_path):
     assert results
     assert any("order.py" in item.source for item in results)
     assert any("图扩展" in item.reason for item in results)
+    assert any("inherits" in item.reason for item in results)
+
+
+def test_graph_retriever_excludes_sensitive_files(tmp_path):
+    """图扩展的文件定位同样要走敏感文件过滤，凭据文件不得进 LLM 上下文。"""
+    (tmp_path / "order.py").write_text("class OrderService:\n    pass\n", encoding="utf-8")
+    # 按文件名排序会先命中这个敏感文件；过滤失效时它会成为上下文来源。
+    (tmp_path / "aaa_secrets.py").write_text(
+        "class OrderService:\n    pass\n", encoding="utf-8"
+    )
+    store = GraphStore(tmp_path / "graph.db")
+    store.replace_all(
+        [], [GraphEdge("SpecialOrder", "OrderService", "inherits")]
+    )
+
+    results = GraphRetriever(store).search(
+        "SpecialOrder", ProjectContext(root=tmp_path.resolve())
+    )
+
+    assert results
+    assert all("aaa_secrets.py" not in item.source for item in results)
+    assert any("order.py" in item.source for item in results)

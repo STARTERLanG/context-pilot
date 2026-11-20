@@ -96,3 +96,18 @@ def test_hotkey_properties_notify(settings):
         setattr(settings, prop, value)
         assert getattr(settings, prop) == value
         assert seen
+
+
+def test_save_failure_rolls_back_in_memory_config(settings, monkeypatch):
+    """写盘失败时内存配置回滚，界面不会显示一个从未落盘的值。"""
+    original = settings.config
+    settings.maxTokens = 12000
+    assert settings.config.context.max_tokens == 12000
+
+    def _fail(*_args, **_kwargs):
+        raise OSError("disk full")
+
+    monkeypatch.setattr("context_pilot.ui.settings_model.save_config", _fail)
+    assert settings.save() is False
+    assert settings.config.context.max_tokens == original.context.max_tokens
+    assert settings.maxTokens == original.context.max_tokens

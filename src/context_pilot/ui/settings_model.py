@@ -8,98 +8,17 @@ Qt 键码 → 热键字符串的映射只在这里出现，platform/keys.py 保�
 
 from dataclasses import replace
 
-from PySide6.QtCore import Property, Qt, QObject, Signal, Slot
+from PySide6.QtCore import Property, QObject, Signal, Slot
 
 from context_pilot.config import Config, load as load_config, save as save_config
+from context_pilot.core.logging_setup import get_logger
 from context_pilot.core.shortcuts import (
-    NAKED_KEYS,
     ShortcutIssue,
     validate_bindings,
 )
 from context_pilot.platform import autostart
-from context_pilot.platform.keys import HotkeyParseError, format as format_hotkey, is_valid
-
-# 只按修饰键时还不构成热键（Key_Shift/Control/Meta/Alt 属 Qt::Key 专区）
-_MODIFIER_KEYS: frozenset[int] = frozenset(
-    {int(Qt.Key_Shift), int(Qt.Key_Control), int(Qt.Key_Meta), int(Qt.Key_Alt)}
-)
-
-# Win32 修饰符位（与 platform.keys 保持一致）
-_MOD_ALT = 0x0001
-_MOD_CONTROL = 0x0002
-_MOD_SHIFT = 0x0004
-_MOD_WIN = 0x0008
-
-# Qt 键码 → Win32 虚拟键码。
-# 用 Qt 枚举常量而不是手写数值：Tab / Return / Escape 这类非字母键在 Qt 里用的是
-# 0x0100xxxx 专区，**并不等于**它们的 ASCII 值（Key_Return 是 0x01000004 而非 0x0D）。
-# 此前写成 0x0D 等 ASCII 值，导致 Ctrl+Enter / Ctrl+Tab 在按下时查不到键码，被判成
-# 「无法识别」而永远捕获不到——这类 bug 只在按特定键时才暴露，很难联想到是表写错了。
-# 字母与数字恰好与 ASCII 一致，照 range 生成即可。
-_QT_TO_VK: dict[int, int] = {
-    int(Qt.Key_Space): 0x20,
-    int(Qt.Key_Tab): 0x09,
-    int(Qt.Key_Backspace): 0x08,
-    int(Qt.Key_Return): 0x0D,
-    int(Qt.Key_Enter): 0x0D,  # 小键盘回车，与主键盘回车同一个虚拟键
-    int(Qt.Key_Escape): 0x1B,
-    int(Qt.Key_Insert): 0x2D,
-    int(Qt.Key_Delete): 0x2E,
-    int(Qt.Key_Home): 0x24,
-    int(Qt.Key_End): 0x23,
-    int(Qt.Key_PageUp): 0x21,
-    int(Qt.Key_PageDown): 0x22,
-    int(Qt.Key_Left): 0x25,
-    int(Qt.Key_Up): 0x26,
-    int(Qt.Key_Right): 0x27,
-    int(Qt.Key_Down): 0x28,
-}
-for _c in range(0x41, 0x5B):  # A-Z
-    _QT_TO_VK[_c] = _c
-for _c in range(0x30, 0x3A):  # 0-9
-    _QT_TO_VK[_c] = _c
-for _n in range(1, 25):  # F1-F24
-    _QT_TO_VK[int(Qt.Key_F1) + _n - 1] = 0x70 + _n - 1
-
-
-def qt_key_sequence(
-    qt_key: int, qt_modifiers: int, *, allow_naked: bool = False
-) -> str:
-    """QML 按键 → 热键字符串；不构成合法绑定时返回空串。
-
-    窗口内快捷键与全局热键共用这套转换，避免两处各自维护一份 Qt 键码表。
-
-    ``allow_naked`` 决定是否接受「无修饰键」的单键：全局热键必须带修饰键
-    （否则系统层面拦不住普通按键），而窗口内的「关闭」允许绑成 Esc——Esc
-    不产生字符，不会跟打字冲突。
-    """
-    # Qt.KeyboardModifier 是 flag 类型，PySide6 上不能直接 int()，要取 .value
-    mask = qt_modifiers
-    modifiers = 0
-    if mask & Qt.ControlModifier.value:
-        modifiers |= _MOD_CONTROL
-    if mask & Qt.AltModifier.value:
-        modifiers |= _MOD_ALT
-    if mask & Qt.ShiftModifier.value:
-        modifiers |= _MOD_SHIFT
-    if mask & Qt.MetaModifier.value:
-        modifiers |= _MOD_WIN
-
-    if qt_key in _MODIFIER_KEYS:
-        return ""
-
-    vk = _QT_TO_VK.get(qt_key)
-    if vk is None:
-        return ""
-    try:
-        sequence = format_hotkey(modifiers, vk)
-    except HotkeyParseError:
-        return ""
-
-    # 无修饰键：只有 allow_naked 且落在白名单（Esc / F1-F12）才放行
-    if modifiers == 0 and not (allow_naked and sequence in NAKED_KEYS):
-        return ""
-    return sequence
+from context_pilot.platform.keys import is_valid
+from context_pilot.shortcuts.qt_keys import qt_key_sequence  # 统一在 shortcuts 包内维护
 
 
 class SettingsModel(QObject):
@@ -119,10 +38,26 @@ class SettingsModel(QObject):
     autostartChanged = Signal()
     autoCopyChanged = Signal()
     closeToTrayChanged = Signal()
+    defaultStyleChanged = Signal()
+    defaultModelIdChanged = Signal()
+    autoPasteChanged = Signal()
+    defaultProjectIdChanged = Signal()
 
-    def __init__(self, parent: QObject | None = None) -> None:
+    def __init__(
+        self, parent: QObject | None = None, config: Config | None = None
+    ) -> None:
         super().__init__(parent)
-        self._config: Config = load_config()
+        if config is None:
+            try:
+                config = load_config()
+            except Exception:
+                get_logger(__name__).exception("配置加载失败，设置页回退默认配置")
+                config = Config()
+        # 装配层可传入已加载的配置，避免损坏的 TOML 在启动后半段二次抛错。
+        self._config: Config = config
+        # 已落盘基线：写盘失败时回滚到这里，而不是回滚到「保存动作开始时」
+        # ——后者其实已经包含了用户本次未保存的编辑。
+        self._saved_config: Config = config
 
     # ---- 快捷键 ----
     def _get_hotkey(self) -> str:
@@ -216,6 +151,54 @@ class SettingsModel(QObject):
         bool, _get_close_to_tray, _set_close_to_tray, notify=closeToTrayChanged
     )
 
+    # ---- 全局增强热键默认值 ----
+    def _get_default_style(self) -> str:
+        return self._config.enhance_hotkey.default_style
+
+    def _set_default_style(self, value: str) -> None:
+        self._config = _replace_enhance_hotkey(self._config, default_style=value)
+        self.defaultStyleChanged.emit()
+
+    defaultStyle = Property(
+        str, _get_default_style, _set_default_style, notify=defaultStyleChanged
+    )
+
+    def _get_default_model_id(self) -> str:
+        return self._config.enhance_hotkey.default_model_id
+
+    def _set_default_model_id(self, value: str) -> None:
+        self._config = _replace_enhance_hotkey(self._config, default_model_id=value)
+        self.defaultModelIdChanged.emit()
+
+    defaultModelId = Property(
+        str, _get_default_model_id, _set_default_model_id, notify=defaultModelIdChanged
+    )
+
+    def _get_auto_paste(self) -> bool:
+        return self._config.enhance_hotkey.auto_paste
+
+    def _set_auto_paste(self, value: bool) -> None:
+        flag = bool(value)
+        if self._config.enhance_hotkey.auto_paste == flag:
+            return
+        self._config = _replace_enhance_hotkey(self._config, auto_paste=flag)
+        self.autoPasteChanged.emit()
+
+    autoPaste = Property(
+        bool, _get_auto_paste, _set_auto_paste, notify=autoPasteChanged
+    )
+
+    def _get_default_project_id(self) -> str:
+        return self._config.enhance_hotkey.default_project_id
+
+    def _set_default_project_id(self, value: str) -> None:
+        self._config = _replace_enhance_hotkey(self._config, default_project_id=value)
+        self.defaultProjectIdChanged.emit()
+
+    defaultProjectId = Property(
+        str, _get_default_project_id, _set_default_project_id, notify=defaultProjectIdChanged
+    )
+
     def _set_context_field(self, field: str, value: int, signal: Signal) -> None:
         """写 context 的整数字段并在真正变化时发 NOTIFY（值未变不发，免去无谓求值）。"""
         number = int(value)
@@ -231,6 +214,25 @@ class SettingsModel(QObject):
             return
         self._config = _replace_behavior(self._config, **{field: flag})
         signal.emit()
+
+    def _notify_all_changed(self) -> None:
+        """回滚配置后让 QML 重新读取全部绑定属性。"""
+        self.hotkeyChanged.emit(self._config.general.hotkey)
+        self.toggleHotkeyChanged.emit(self._config.general.toggle_hotkey)
+        for signal in (
+            self.maxTokensChanged,
+            self.rulesTokensChanged,
+            self.memoryTokensChanged,
+            self.codeTokensChanged,
+            self.autostartChanged,
+            self.autoCopyChanged,
+            self.closeToTrayChanged,
+            self.defaultStyleChanged,
+            self.defaultModelIdChanged,
+            self.autoPasteChanged,
+            self.defaultProjectIdChanged,
+        ):
+            signal.emit()
 
     # ---------- 窗口内快捷键 ----------
     # 读写都走 SettingsModel 是为了让「谁负责写 config.toml」只有一个答案：
@@ -341,11 +343,19 @@ class SettingsModel(QObject):
 
         try:
             save_config(self._config)
-            if self._config.behavior.autostart != autostart.is_enabled():
-                autostart.apply(self._config.behavior.autostart)
         except OSError as exc:
+            # 写盘失败必须回滚到上次成功落盘的配置：否则界面显示「已改」
+            # 而磁盘没改，用户下次启动才发现设置全丢了。
+            self._config = self._saved_config
+            self._notify_all_changed()
             self.saveFailed.emit(f"写入配置失败：{exc}")
             return False
+        # 配置文件已成功落盘，从这里开始它就是新的回滚基线。
+        self._saved_config = self._config
+
+        try:
+            if self._config.behavior.autostart != autostart.is_enabled():
+                autostart.apply(self._config.behavior.autostart)
         except Exception as exc:  # 注册表写入可能抛出 Windows 专属异常
             self.autostartFailed.emit(f"设置开机自启失败：{exc}")
 
@@ -363,3 +373,7 @@ def _replace_context(config: Config, **kw) -> Config:
 
 def _replace_behavior(config: Config, **kw) -> Config:
     return replace(config, behavior=replace(config.behavior, **kw))
+
+
+def _replace_enhance_hotkey(config: Config, **kw) -> Config:
+    return replace(config, enhance_hotkey=replace(config.enhance_hotkey, **kw))

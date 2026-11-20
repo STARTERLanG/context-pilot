@@ -4,6 +4,8 @@
 写回时整体重渲染模板，保证文件结构与字段注释始终一致。
 """
 
+import os
+import tempfile
 import tomllib
 from dataclasses import dataclass, field, replace
 from pathlib import Path
@@ -20,6 +22,42 @@ from context_pilot.core.shortcuts import (
 
 _DEFAULT_DIR = Path.home() / ".context-pilot"
 _CONFIG_NAME = "config.toml"
+
+_TRUE_VALUES = frozenset({"true", "1", "yes", "on"})
+_FALSE_VALUES = frozenset({"false", "0", "no", "off"})
+
+
+def _as_bool(value, default: bool) -> bool:
+    """显式解析布尔：bool("false") 是 True，直接用会把配置语义反转。"""
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, int) and value in (0, 1):
+        return bool(value)
+    if isinstance(value, str):
+        text = value.strip().lower()
+        if text in _TRUE_VALUES:
+            return True
+        if text in _FALSE_VALUES:
+            return False
+    return default
+
+
+def _as_float(value, default: float) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _as_int(value, default: int) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _as_str(value, default: str = "") -> str:
+    return value if isinstance(value, str) else default
 
 
 @dataclass(frozen=True)
@@ -148,12 +186,39 @@ class BehaviorConfig:
 
 
 @dataclass(frozen=True)
+class EnhanceHotkeyConfig:
+    """全局增强热键（ctrl+shift+e）的专用默认值。
+
+    与主窗口顶行的「项目 / 模型 / 风格」选择**相互独立**：全局热键在后台触发时，
+    主窗口的会话级选择可能早已被切走，故热键需要一份属于自己的默认模式与默认模型。
+
+    - ``default_style``：默认优化模式 key（复用 OUTPUT_STYLES 的四档内置模式），
+      留空或非法时回落「结构化增强」（default）。
+    - ``default_model_id``：默认模型配置 id（指向 profiles.db 的 model_profiles）。
+      留空表示「未指定」，触发时按回落规则取用：优先当前选中的目标，否则唯一
+      已生效的配置，再否则报错提示。
+    - ``auto_paste``：是否自动「全选→复制→增强→粘贴回写」。为 True 时热键触发
+      会先全选当前输入框文本、复制、增强后自动粘贴回写；为 False 时只读取已
+      选中文本、增强后把结果写回剪贴板，由用户自行粘贴。
+    - ``default_project_id``：默认项目 id（指向 projects.db 的项目条目）。
+      留空或为 ``default`` 表示「无项目」（不检索项目代码、仅优化文本）；指定了
+      某个已索引的项目时，热键增强会检索该项目代码作为上下文。
+    """
+
+    default_style: str = "default"
+    default_model_id: str = ""
+    auto_paste: bool = False
+    default_project_id: str = ""
+
+
+@dataclass(frozen=True)
 class Config:
     general: GeneralConfig = field(default_factory=GeneralConfig)
     llm: LlmConfig = field(default_factory=LlmConfig)
     memory: MemoryConfig = field(default_factory=MemoryConfig)
     context: ContextConfig = field(default_factory=ContextConfig)
     behavior: BehaviorConfig = field(default_factory=BehaviorConfig)
+    enhance_hotkey: EnhanceHotkeyConfig = field(default_factory=EnhanceHotkeyConfig)
     shortcuts: ShortcutsConfig = field(default_factory=ShortcutsConfig)
 
 
@@ -174,32 +239,65 @@ def load(base_dir: Path | None = None) -> Config:
     memory = data.get("memory", {})
     context = data.get("context", {})
     behavior = data.get("behavior", {})
+    enhance_hotkey = data.get("enhance_hotkey", {})
     raw_shortcuts = data.get("shortcuts", {})
 
+    # 逐字段回落默认值：手改坏一个字段不该让整个配置读不出来，
+    # 更不该让 bool("false") 把「关闭」静默变成「开启」。
+    defaults = Config()
     return Config(
         general=GeneralConfig(
-            project_root=general.get("project_root", ""),
-            hotkey=general.get("hotkey", "ctrl+shift+e"),
-            toggle_hotkey=general.get("toggle_hotkey", "ctrl+alt+p"),
-            agent=general.get("agent", "claude"),
+            project_root=_as_str(general.get("project_root"), defaults.general.project_root),
+            hotkey=_as_str(general.get("hotkey"), defaults.general.hotkey),
+            toggle_hotkey=_as_str(
+                general.get("toggle_hotkey"), defaults.general.toggle_hotkey
+            ),
+            agent=_as_str(general.get("agent"), defaults.general.agent),
         ),
-        llm=LlmConfig(timeout=float(llm.get("timeout", 60.0))),
-        memory=MemoryConfig(enabled=bool(memory.get("enabled", True))),
+        llm=LlmConfig(
+            timeout=_as_float(llm.get("timeout"), defaults.llm.timeout),
+        ),
+        memory=MemoryConfig(
+            enabled=_as_bool(memory.get("enabled"), defaults.memory.enabled),
+        ),
         context=ContextConfig(
-            max_tokens=int(context.get("max_tokens", 6000)),
-            rules_tokens=int(context.get("rules_tokens", 1500)),
-            memory_tokens=int(context.get("memory_tokens", 1000)),
-            code_tokens=int(context.get("code_tokens", 3500)),
+            max_tokens=_as_int(context.get("max_tokens"), defaults.context.max_tokens),
+            rules_tokens=_as_int(
+                context.get("rules_tokens"), defaults.context.rules_tokens
+            ),
+            memory_tokens=_as_int(
+                context.get("memory_tokens"), defaults.context.memory_tokens
+            ),
+            code_tokens=_as_int(context.get("code_tokens"), defaults.context.code_tokens),
         ),
         behavior=BehaviorConfig(
-            autostart=bool(behavior.get("autostart", False)),
-            auto_copy=bool(behavior.get("auto_copy", True)),
-            close_to_tray=bool(behavior.get("close_to_tray", True)),
+            autostart=_as_bool(behavior.get("autostart"), defaults.behavior.autostart),
+            auto_copy=_as_bool(behavior.get("auto_copy"), defaults.behavior.auto_copy),
+            close_to_tray=_as_bool(
+                behavior.get("close_to_tray"), defaults.behavior.close_to_tray
+            ),
+        ),
+        enhance_hotkey=EnhanceHotkeyConfig(
+            default_style=_as_str(
+                enhance_hotkey.get("default_style"),
+                defaults.enhance_hotkey.default_style,
+            ),
+            default_model_id=_as_str(
+                enhance_hotkey.get("default_model_id"),
+                defaults.enhance_hotkey.default_model_id,
+            ),
+            auto_paste=_as_bool(
+                enhance_hotkey.get("auto_paste"), defaults.enhance_hotkey.auto_paste
+            ),
+            default_project_id=_as_str(
+                enhance_hotkey.get("default_project_id"),
+                defaults.enhance_hotkey.default_project_id,
+            ),
         ),
         shortcuts=ShortcutsConfig(
-            scheme=str(raw_shortcuts.get("scheme", DEFAULT_SCHEME)),
+            scheme=_as_str(raw_shortcuts.get("scheme"), DEFAULT_SCHEME),
             **{
-                action: str(raw_shortcuts.get(action, ""))
+                action: _as_str(raw_shortcuts.get(action))
                 for action in ACTION_IDS
             },
         ),
@@ -207,10 +305,32 @@ def load(base_dir: Path | None = None) -> Config:
 
 
 def save(config: Config, base_dir: Path | None = None) -> None:
-    """整体重渲染配置文件。"""
+    """整体重渲染配置文件（同目录临时文件 + 原子替换）。
+
+    直接 write_text 遇到写盘中断会留下半截 TOML，下次启动整个配置读不出来。
+    同目录的临时文件保证 os.replace 是原子操作，也不会跨文件系统失败。
+    """
     path = config_path(base_dir)
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(_render(config), encoding="utf-8")
+    content = _render(config)
+    temp_path: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            dir=path.parent,
+            prefix=f".{_CONFIG_NAME}.",
+            suffix=".tmp",
+            delete=False,
+        ) as handle:
+            temp_path = Path(handle.name)
+            handle.write(content)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temp_path, path)
+    finally:
+        if temp_path is not None and temp_path.exists():
+            temp_path.unlink()
 
 
 def _toml_str(value: str) -> str:
@@ -251,6 +371,17 @@ def _render(config: Config) -> str:
         f"autostart = {str(config.behavior.autostart).lower()}",
         f"auto_copy = {str(config.behavior.auto_copy).lower()}",
         f"close_to_tray = {str(config.behavior.close_to_tray).lower()}",
+        "",
+        "[enhance_hotkey]",
+        "# 全局增强热键的专用默认值（与主窗口顶行的当前选择相互独立）",
+        "# 默认优化模式 key：default/basic/professional/planning（见「优化模式」页）",
+        f"default_style = {_toml_str(config.enhance_hotkey.default_style)}",
+        "# 默认模型配置 id（profiles.db）；留空表示未指定，触发时按回落规则取用",
+        f"default_model_id = {_toml_str(config.enhance_hotkey.default_model_id)}",
+        "# 是否自动「全选→复制→增强→粘贴回写」；关闭时仅把结果写回剪贴板",
+        f"auto_paste = {str(config.enhance_hotkey.auto_paste).lower()}",
+        "# 默认项目 id（projects.db）；留空或 default 表示无项目（不检索代码）",
+        f"default_project_id = {_toml_str(config.enhance_hotkey.default_project_id)}",
         "",
         "[shortcuts]",
         "# 窗口内快捷键：scheme 只是「上次套用的方案」，便于一键重置；",

@@ -42,6 +42,32 @@ def test_delete(tmp_path):
     assert store.get(entry.id) is None
 
 
+def test_delete_drops_project_index_table(tmp_path):
+    """删项目必须同时清掉 index.db 的 files_<id>，否则孤儿表永久残留。"""
+    store = _store(tmp_path)
+    project = tmp_path / "app"
+    project.mkdir()
+    (project / "a.py").write_text("x", encoding="utf-8")
+    entry = store.add(str(project))
+    indexer = Indexer(base_dir=tmp_path)
+    indexer.build(entry, store)
+    table = f"files_{entry.id}"
+
+    def _exists() -> bool:
+        with closing(sqlite3.connect(indexer._db_path)) as conn:
+            return (
+                conn.execute(
+                    "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?",
+                    (table,),
+                ).fetchone()
+                is not None
+            )
+
+    assert _exists() is True
+    assert store.delete(entry.id) is True
+    assert _exists() is False
+
+
 def test_index_success(tmp_path):
     store = _store(tmp_path)
     project = tmp_path / "app"

@@ -2,9 +2,13 @@
 
 from pathlib import Path
 
+import pytest
+
+import context_pilot.config as config_module
 from context_pilot.config import (
     BehaviorConfig,
     Config,
+    EnhanceHotkeyConfig,
     GeneralConfig,
     LlmConfig,
     config_path,
@@ -101,3 +105,81 @@ def test_save_drops_legacy_llm_fields(tmp_path):
     assert "api_key" not in text
     assert "base_url" not in text
     assert "timeout" in text
+
+
+def test_enhance_hotkey_defaults(tmp_path):
+    """增强热键默认值：默认模式=default、默认模型=空、自动粘贴=关、默认项目=空。"""
+    config = load(base_dir=tmp_path)
+
+    assert config.enhance_hotkey.default_style == "default"
+    assert config.enhance_hotkey.default_model_id == ""
+    assert config.enhance_hotkey.auto_paste is False
+    assert config.enhance_hotkey.default_project_id == ""
+
+
+def test_enhance_hotkey_roundtrip(tmp_path):
+    """增强热键默认值写入配置后可完整读回。"""
+    config = with_updates(
+        Config(),
+        enhance_hotkey=EnhanceHotkeyConfig(
+            default_style="professional",
+            default_model_id="abc123",
+            auto_paste=True,
+            default_project_id="proj-1",
+        ),
+    )
+
+    save(config, base_dir=tmp_path)
+    reloaded = load(base_dir=tmp_path)
+
+    assert reloaded.enhance_hotkey.default_style == "professional"
+    assert reloaded.enhance_hotkey.default_model_id == "abc123"
+    assert reloaded.enhance_hotkey.auto_paste is True
+    assert reloaded.enhance_hotkey.default_project_id == "proj-1"
+
+
+def test_enhance_hotkey_partial_falls_back_to_defaults(tmp_path):
+    """旧配置没有 enhance_hotkey section 时，各字段回落默认值。"""
+    Path(tmp_path, "config.toml").write_text("[general]\nhotkey = \"ctrl+shift+e\"\n", encoding="utf-8")
+
+    config = load(base_dir=tmp_path)
+
+    assert config.enhance_hotkey.default_style == "default"
+    assert config.enhance_hotkey.auto_paste is False
+    assert config.enhance_hotkey.default_project_id == ""
+
+
+def test_malformed_scalar_values_fall_back_individually(tmp_path):
+    """单个字段写坏只回落该字段，布尔字符串不得被 bool() 静默反转。"""
+    Path(tmp_path, "config.toml").write_text(
+        '[llm]\ntimeout = "abc"\n'
+        '[memory]\nenabled = "false"\n'
+        '[context]\nmax_tokens = "oops"\n'
+        '[behavior]\nauto_copy = "false"\n'
+        '[enhance_hotkey]\nauto_paste = "yes"\n',
+        encoding="utf-8",
+    )
+
+    config = load(base_dir=tmp_path)
+
+    assert config.llm.timeout == 60.0
+    assert config.memory.enabled is False
+    assert config.context.max_tokens == 6000
+    assert config.behavior.auto_copy is False
+    assert config.enhance_hotkey.auto_paste is True
+
+
+def test_save_failure_keeps_previous_file_and_no_temp_left(tmp_path, monkeypatch):
+    """写盘中断时旧配置必须完好，且不留半截临时文件。"""
+    save(Config(), base_dir=tmp_path)
+    original = config_path(tmp_path).read_text(encoding="utf-8")
+
+    def _fail_replace(*_args, **_kwargs):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(config_module.os, "replace", _fail_replace)
+    with pytest.raises(OSError):
+        save(with_updates(Config(), llm=LlmConfig(timeout=1.0)), base_dir=tmp_path)
+
+    assert config_path(tmp_path).read_text(encoding="utf-8") == original
+    assert list(tmp_path.glob(".config.toml.*.tmp")) == []

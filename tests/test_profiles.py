@@ -28,7 +28,7 @@ def test_add_list_and_get(tmp_path):
 
 def test_api_key_masked_in_listing(tmp_path):
     store = _store(tmp_path)
-    profile = store.add(
+    store.add(
         name="p", provider="openai", base_url="https://x",
         api_key="sk-abcdefghijklmnop", model="m",
         temperature=0.2, max_tokens=100, enabled=False,

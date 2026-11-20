@@ -10,6 +10,7 @@ from pathlib import Path
 from context_pilot.core.models import ContextItem
 from context_pilot.graph.store import GraphStore
 from context_pilot.project.models import ProjectContext
+from context_pilot.retrieval.ignore import is_ignored_dir, is_sensitive
 
 _TOKEN_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 
@@ -26,6 +27,7 @@ class GraphRetriever:
             return []
 
         related_files: dict[str, float] = {}
+        relations: dict[str, str] = {}
         for token in tokens:
             edges = self._store.neighbors(token)
             for edge in edges:
@@ -34,6 +36,9 @@ class GraphRetriever:
                 related_files[edge.target] = max(
                     related_files.get(edge.target, 0.0), score
                 )
+                # 按目标记下关系：原实现在循环结束后引用 edge，
+                # 结果所有上下文项都显示最后一条边的关系。
+                relations[edge.target] = edge.relation
 
         items: list[ContextItem] = []
         for target, score in related_files.items():
@@ -54,7 +59,7 @@ class GraphRetriever:
                     path=rel,
                     content=content[:4000],
                     relevance=score,
-                    reason=f"图扩展：{target}（关系 {edge.relation}）",
+                    reason=f"图扩展：{target}（关系 {relations[target]}）",
                 )
             )
         return items
@@ -63,6 +68,12 @@ class GraphRetriever:
         """在项目文件中定位包含该符号定义的文件（粗糙：文件级扫描）。"""
         candidates: list[Path] = []
         for path in root.rglob("*.py"):
+            # 与其他检索路径共用安全白名单：secrets.py / credentials.py
+            # 一类文件即使命中符号，也绝不能进入 LLM 上下文。
+            if is_sensitive(path) or any(
+                is_ignored_dir(part) for part in path.relative_to(root).parts[:-1]
+            ):
+                continue
             try:
                 text = path.read_text(encoding="utf-8", errors="replace")
             except OSError:

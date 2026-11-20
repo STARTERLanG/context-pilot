@@ -74,6 +74,17 @@ def test_logger_output_is_redacted(tmp_path):
     assert "***" in text
 
 
+def test_logger_preserves_numeric_args(tmp_path):
+    """脱敏 Filter 不得把数字参数强转 str，否则 `%d`/`%f` 格式化会抛异常、
+    整条日志被吞掉（历史上「抓取到文本长度=%d」这类日志因此丢失）。"""
+    path = setup_logging(base_dir=tmp_path, to_stderr=False)
+    get_logger("test.num").info("长度=%d，比例=%.1f", 123, 0.5)
+
+    text = path.read_text(encoding="utf-8")
+    assert "长度=123" in text
+    assert "比例=0.5" in text
+
+
 # ── 初始化行为 ────────────────────────────────────────────────────────
 
 

@@ -63,7 +63,11 @@ class _RedactingFilter(logging.Filter):
                 if isinstance(record.args, dict):
                     record.args = {k: redact(str(v)) for k, v in record.args.items()}
                 else:
-                    record.args = tuple(redact(str(a)) for a in record.args)
+                    # 只脱敏字符串参数；数字/布尔等保持原类型，否则 `%d`/`%f`
+                    # 格式化会因拿到 str 而抛「number is required」、整条日志被吞。
+                    record.args = tuple(
+                        redact(a) if isinstance(a, str) else a for a in record.args
+                    )
         except Exception:  # 脱敏本身出错也不能丢日志
             pass
         return True

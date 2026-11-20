@@ -8,7 +8,7 @@ SettingsController 承接了原 QWidget 设置窗里与列表相关的逻辑：�
 import time
 
 import pytest
-from PySide6.QtCore import QCoreApplication, QThread
+from PySide6.QtCore import QCoreApplication
 
 from context_pilot.ui.settings_controller import SettingsController
 from context_pilot.ui.settings_model import SettingsModel

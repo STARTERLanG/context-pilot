@@ -11,6 +11,7 @@
 """
 
 import os
+import re
 import sqlite3
 import time
 from contextlib import closing
@@ -138,6 +139,22 @@ class Indexer:
         result.duration_ms = int((time.monotonic() - started) * 1000)
         store.set_status(entry.id, STATUS_DONE)
         return result
+
+    def drop_index(self, entry_id: str) -> None:
+        """删除某项目对应的索引表。
+
+        表名只能由本模块按 entry.id 拼接，故先做严格字符校验；删除失败只记
+        日志，不阻断项目条目本身的删除（索引可随时重建，孤儿表只是占空间）。
+        """
+        if not re.fullmatch(r"[A-Za-z0-9_]+", entry_id):
+            get_logger(__name__).warning("拒绝删除非法项目 id 的索引表：%r", entry_id)
+            return
+        table = f"files_{entry_id}"
+        try:
+            with closing(self._connect()) as conn, conn:
+                conn.execute(f"DROP TABLE IF EXISTS {table}")
+        except (OSError, sqlite3.Error):
+            get_logger(__name__).exception("删除项目索引表失败：%s", entry_id)
 
     @staticmethod
     def _load_previous(conn: sqlite3.Connection, table: str) -> dict | None:

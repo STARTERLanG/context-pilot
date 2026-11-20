@@ -111,7 +111,14 @@ class ProjectStore:
             cursor = conn.execute(
                 "DELETE FROM project_entries WHERE id = ?", (entry_id,)
             )
-        return cursor.rowcount > 0
+        deleted = cursor.rowcount > 0
+        if deleted:
+            # 延迟导入：indexer 在模块顶层导入本文件，直接 import 会成环。
+            # 删项目时一并清掉 index.db 里的 files_<id>，否则孤儿表永久残留。
+            from context_pilot.projects.indexer import Indexer
+
+            Indexer(self._path.parent).drop_index(entry_id)
+        return deleted
 
 
 def _now() -> str:

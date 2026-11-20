@@ -153,10 +153,12 @@ def _render_context(
     used = 0
     for item in items:
         body = item.snippet or item.content
-        # 中和伪装的 XML 标签，防止项目内容伪造上下文分段边界
+        # source 同样来自项目文件（文件名/规则来源），也需中和：
+        # 非 Windows 文件名可含 < >，此前只有正文被处理，source 可单独伪造标签。
+        source = _neutralize_boundary_tags(item.source or "")
         body = _neutralize_boundary_tags(body)
         bucket = bucket_of.get(item.type, "relevant_code")
-        block = f"{item.source}\n{body}"
+        block = f"{source}\n{body}"
         cost = estimate(block)
         # 放不下就跳过这一项，而不是终止整个渲染：后面可能还有更小、
         # 但如果排在前面顺位的相关项。此前用 break 会让一个超长项

@@ -126,3 +126,40 @@ def _flake(source: str, filename: str) -> list:
     reporter = _Collector()
     api.check(source, filename, reporter)
     return reporter.messages
+
+
+def _nested_functions(node, parent_is_function=False):
+    """遍历 AST，产出所有「嵌套在函数内部的函数定义」及其行号。"""
+    import ast
+
+    for child in ast.iter_child_nodes(node):
+        if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            if parent_is_function:
+                yield child
+            # 该函数自身的内部仍属于「嵌套」语境
+            yield from _nested_functions(child, parent_is_function=True)
+        else:
+            yield from _nested_functions(child, parent_is_function=parent_is_function)
+
+
+def test_nested_functions_must_not_take_self():
+    """`main()` 里的闭包不能以 self 作首参。
+
+    背景：一次改动把闭包 `_run_enhance(text, ...)` 误写成
+    `_run_enhance(self, text, ...)`。它只是局部函数而非方法，于是第一个位置
+    实参被吞进 `self`，调用时抛 `TypeError: missing 1 required positional
+    argument: 'text'`。该异常发生在 QTimer 回调里，既不进应用日志也没有任何
+    UI 反馈——表现为「按了热键只闪一下进行中提示，然后彻底没反应」，极难排查。
+
+    这类错误 pyflakes / 类型检查都发现不了（签名本身合法），只能靠静态规则拦。
+    """
+    import ast
+
+    source = io.open(app_module.__file__, encoding="utf-8").read()
+    tree = ast.parse(source)
+    offenders = []
+    for fn in _nested_functions(tree):
+        args = [a.arg for a in fn.args.posonlyargs + fn.args.args]
+        if args and args[0] == "self":
+            offenders.append(f"{fn.name}(第 {fn.lineno} 行) 首参为 self")
+    assert offenders == [], "嵌套函数误带 self 参数：" + "；".join(offenders)

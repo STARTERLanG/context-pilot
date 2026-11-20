@@ -410,11 +410,15 @@ class SettingsController(QObject):
 
     @Slot()
     def shutdown(self) -> None:
-        """放弃对后台线程的持有，回收交回 Qt 的父子关系。窗口关闭 / 退出前调用。
+        """退出前等待仍运行的后台线程，再放弃 Python 侧持有。
 
-        刻意**不**在这里 wait 或 deleteLater：线程 finished 时 `_discard` 已经排过
-        一次 delayed delete，若此时再触碰该对象，很可能作用在已被销毁的内存上
-        ——C++ 层的 abort，try/except 拦不住。清掉 Python 侧的持有即可，剩余生命
-        周期由 Qt 按 parent 关系处理。
+        这里不使用 deleteLater：`_discard` 的注释已说明 delayed delete 与
+        QThread 停止时机叠加会 abort。但只 clear() 不停 wait() 同样危险——
+        controller 析构时 QThread 仍在跑，Qt 会 "Destroyed while thread is
+        still running" 直接终止进程。wait() 只作用于仍在运行的线程，已结束的
+        对象不再触碰。
         """
+        for thread in list(self._threads):
+            if thread.isRunning():
+                thread.wait()
         self._threads.clear()
