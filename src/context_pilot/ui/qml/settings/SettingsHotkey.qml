@@ -13,6 +13,15 @@ Flickable {
     clip: true
     boundsBehavior: Flickable.StopAtBounds
 
+    // 按 id 从候选列表查展示名（下拉收起态要显示「当前选中哪一项」）。
+    // styles / models 的项都含 id 与 name 字段，此处统一取 name。
+    function labelOf(list, id) {
+        if (!list || !id) return ""
+        for (var i = 0; i < list.length; i++)
+            if (list[i].id === id) return list[i].name
+        return ""
+    }
+
     ScrollBar.vertical: ScrollBar {
         width: 6
         policy: ScrollBar.AsNeeded
@@ -77,6 +86,78 @@ Flickable {
                 font.family: theme.fontFamily
                 font.pixelSize: theme.fontCaption
                 wrapMode: Text.Wrap
+            }
+        }
+
+        // ---------- 增强热键默认值 ----------
+        AppSectionCard {
+            Text {
+                Layout.fillWidth: true
+                text: "增强热键默认值"
+                color: theme.textPrimary
+                font.family: theme.fontFamily
+                font.pixelSize: theme.fontSubtitle
+                font.weight: Font.DemiBold
+            }
+
+            AppFieldRow {
+                Layout.fillWidth: true
+                title: "默认模式"
+                desc: "触发增强热键时默认使用的优化模式（后台触发，与主窗口当前选择无关）"
+                AppSelect {
+                    anchors.centerIn: parent
+                    width: 180
+                    label: ""
+                    options: sessionCtl.styles
+                    currentId: settings.defaultStyle
+                    currentText: root.labelOf(sessionCtl.styles, settings.defaultStyle)
+                    emptyText: "结构化增强"
+                    onSelected: (id) => settings.defaultStyle = id
+                }
+            }
+
+            AppFieldRow {
+                Layout.fillWidth: true
+                title: "默认模型"
+                desc: "触发增强热键时默认使用的模型；留空则回落为当前选中或唯一已生效模型"
+                AppSelect {
+                    anchors.centerIn: parent
+                    width: 180
+                    label: ""
+                    options: sessionCtl.models
+                    currentId: settings.defaultModelId
+                    currentText: root.labelOf(sessionCtl.models, settings.defaultModelId)
+                    emptyText: "未指定（自动回落）"
+                    onSelected: (id) => settings.defaultModelId = id
+                }
+            }
+
+            AppFieldRow {
+                Layout.fillWidth: true
+                title: "默认项目"
+                desc: "触发增强热键时默认关联的项目，决定是否检索该项目代码作为上下文；「无项目」则仅优化文本"
+                AppSelect {
+                    anchors.centerIn: parent
+                    width: 180
+                    label: ""
+                    options: sessionCtl.projects
+                    currentId: settings.defaultProjectId
+                    currentText: root.labelOf(sessionCtl.projects, settings.defaultProjectId)
+                    emptyText: "无项目"
+                    onSelected: (id) => settings.defaultProjectId = (id === "default" ? "" : id)
+                }
+            }
+
+            AppFieldRow {
+                Layout.fillWidth: true
+                title: "自动复制粘贴"
+                desc: "开启后触发热键自动全选→复制→增强→粘贴回写；关闭则仅把结果写回剪贴板"
+                AppToggle {
+                    anchors.verticalCenter: parent.verticalCenter
+                    anchors.right: parent.right
+                    checked: settings.autoPaste
+                    onToggled: (checked) => settings.autoPaste = checked
+                }
             }
         }
     }

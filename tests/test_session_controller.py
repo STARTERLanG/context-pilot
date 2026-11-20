@@ -300,6 +300,58 @@ def test_provider_target_none_when_key_missing(ctl, stores):
     assert ctl.provider_target() is None
 
 
+# ---------- 全局热键默认模型（按 id 解析） ----------
+def test_provider_target_by_id_resolves_enabled_profile(ctl, stores):
+    """按 id 解析调用目标：热键默认模型独立于主窗口当前选择。"""
+    profiles, _, _ = stores
+    chosen = _add_profile(profiles, "beta", "model-b", key="sk-b", enabled=True)
+    ctl.reload()
+
+    target = ctl.provider_target_by_id(chosen.id)
+    assert target == {
+        "base_url": "https://beta.test/v1",
+        "api_key": "sk-b",
+        "model": "model-b",
+        "temperature": 0.2,
+    }
+
+
+def test_provider_target_by_id_none_when_not_enabled(ctl, stores):
+    """未生效的配置即使指定了 id 也不能作为热键默认模型。"""
+    profiles, _, _ = stores
+    disabled = _add_profile(profiles, "alpha", "model-a", enabled=False)
+    ctl.reload()
+
+    assert ctl.provider_target_by_id(disabled.id) is None
+
+
+def test_provider_target_by_id_none_for_unknown(ctl):
+    """未知 id / 空 id 一律返回 None。"""
+    assert ctl.provider_target_by_id("not-exist") is None
+    assert ctl.provider_target_by_id("") is None
+
+
+# ---------- 全局热键默认项目（按 id 解析根目录） ----------
+def test_project_root_by_id_default_means_no_project(ctl):
+    """空串 / default 都表示「无项目」：不检索代码，根目录为空。"""
+    assert ctl.project_root_by_id("") == ""
+    assert ctl.project_root_by_id("default") == ""
+
+
+def test_project_root_by_id_resolves_project(ctl, stores, isolated_home):
+    """按 id 解析根目录：热键默认项目独立于主窗口当前选择。"""
+    _, projects, _ = stores
+    entry = projects.add(str(isolated_home / "repo"))
+    ctl.reload()
+
+    assert ctl.project_root_by_id(entry.id) == entry.path
+
+
+def test_project_root_by_id_unknown_falls_back_to_empty(ctl):
+    """指向的项目被删除后回落「无项目」，不悬着一个不存在的根目录。"""
+    assert ctl.project_root_by_id("not-exist") == ""
+
+
 # ---------- 空数据 ----------
 def test_models_empty_without_any_source(empty_dir, qapp):
     """没有任何已生效配置时，列表为空但不崩，标签为空串。"""

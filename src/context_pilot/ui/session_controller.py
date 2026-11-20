@@ -249,6 +249,21 @@ class SessionController(QObject):
                 return path or self._default_root()
         return self._default_root()
 
+    def project_root_by_id(self, project_id: str) -> str:
+        """按指定项目 id 解析根目录；空串或 default 表示「无项目」。
+
+        供全局增强热键用：热键默认项目是独立于主窗口选择的另一份 id，
+        需要按 id 单独取回根目录。返回空串表示不检索代码、仅优化文本。
+        """
+        if not project_id or project_id == DEFAULT_PROJECT_ID:
+            return ""
+        for item in self._projects:
+            if item.get("id") == project_id:
+                path = str(item.get("path") or "")
+                return path or self._default_root()
+        # 指向的项目已被删除：回落「无项目」，不悬着一个不存在的根目录
+        return ""
+
     def provider_target(self) -> dict | None:
         """当前选中模型对应的调用目标；None 表示未选中可用模型。
 
@@ -257,10 +272,24 @@ class SessionController(QObject):
         """
         if not self._model_id:
             return None
-        profile = self._profile_store.get(self._model_id)
+        return self.provider_target_by_id(self._model_id)
+
+    def provider_target_by_id(self, profile_id: str) -> dict | None:
+        """按指定配置 id 解析调用目标；None 表示该 id 不可用或未生效。
+
+        供全局增强热键用：热键默认模型是独立于主窗口选择的另一份 id，
+        需要按 id 单独取回 base_url/api_key/model。
+        """
+        if not profile_id:
+            return None
+        # 只允许「已生效」的配置作为增强目标：未生效的配置不可调用
+        enabled_ids = {p.id for p in self._profile_store.list_enabled()}
+        if profile_id not in enabled_ids:
+            return None
+        profile = self._profile_store.get(profile_id)
         if profile is None:
             return None
-        key = self._profile_store.reveal_key_by_id(self._model_id)
+        key = self._profile_store.reveal_key_by_id(profile_id)
         if not key or not profile.base_url:
             return None
         return {

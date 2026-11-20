@@ -21,7 +21,8 @@ from context_pilot.core.shortcuts import (
     validate_bindings,
     variants,
 )
-from context_pilot.ui.settings_model import SettingsModel, qt_key_sequence
+from context_pilot.shortcuts.qt_keys import qt_key_sequence
+from context_pilot.ui.settings_model import SettingsModel
 
 
 class ShortcutController(QObject):
