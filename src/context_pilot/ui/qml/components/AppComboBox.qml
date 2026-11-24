@@ -31,29 +31,17 @@ Rectangle {
         elide: Text.ElideRight
     }
 
-    // 箭头：捕获态旋转 180°（与展开方向一致）
-    Canvas {
+    // 箭头：展开态旋转 180°（与展开方向一致），颜色随激活态切换
+    AppIcon {
         id: chevron
         width: 10; height: 10
         anchors.right: parent.right
         anchors.rightMargin: theme.spaceMd
         anchors.verticalCenter: parent.verticalCenter
+        name: "chevron"
+        tint: popup.visible ? theme.accent : theme.textMuted
         rotation: popup.visible ? 180 : 0
         Behavior on rotation { NumberAnimation { duration: 120 } }
-        onRotationChanged: requestPaint()
-        onPaint: {
-            var c = getContext("2d")
-            c.clearRect(0, 0, width, height)
-            c.strokeStyle = popup.visible ? theme.accent : theme.textMuted
-            c.lineWidth = 1.4
-            c.lineCap = "round"
-            c.lineJoin = "round"
-            c.beginPath()
-            c.moveTo(1.5, height * 0.38)
-            c.lineTo(width / 2, height * 0.68)
-            c.lineTo(width - 1.5, height * 0.38)
-            c.stroke()
-        }
     }
 
     HoverHandler { cursorShape: Qt.PointingHandCursor }

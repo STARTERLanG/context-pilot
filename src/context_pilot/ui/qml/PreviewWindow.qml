@@ -160,26 +160,17 @@ Rectangle {
                 anchors.verticalCenter: parent.verticalCenter
                 spacing: theme.spaceSm
 
-                // 应用图标：纸飞机（与托盘/任务栏图标一致）
+                // 应用图标：Signal 品牌标记（与托盘/任务栏图标同一图形）
                 Rectangle {
                     width: 26; height: 26; radius: theme.radiusSm
-                    color: theme.accent
+                    color: theme.surface
+                    border.width: 1
+                    border.color: theme.border
                     anchors.verticalCenter: parent.verticalCenter
-                    Canvas {
-                        anchors.fill: parent
-                        anchors.margins: 4
-                        onPaint: {
-                            var ctx = getContext("2d")
-                            ctx.clearRect(0, 0, width, height)
-                            ctx.fillStyle = theme.textInverse
-                            ctx.beginPath()
-                            ctx.moveTo(width, height * 0.06)
-                            ctx.lineTo(width * 0.65, height)
-                            ctx.lineTo(width * 0.5, height * 0.56)
-                            ctx.lineTo(width * 0.06, height * 0.4)
-                            ctx.closePath()
-                            ctx.fill()
-                        }
+                    AppIcon {
+                        anchors.centerIn: parent
+                        width: 18; height: 18
+                        name: "signal"
                     }
                 }
                 Text {
@@ -208,34 +199,11 @@ Rectangle {
                     radius: theme.radiusSm
                     color: settingsHover.hovered ? theme.surfaceHover : "transparent"
                     anchors.verticalCenter: parent.verticalCenter
-                    Canvas {
+                    AppIcon {
                         width: 14; height: 14
                         anchors.centerIn: parent
-                        onPaint: {
-                            var c = getContext("2d")
-                            c.clearRect(0, 0, width, height)
-                            c.strokeStyle = theme.textSecondary
-                            c.lineWidth = 1.3
-                            c.lineCap = "round"
-                            // 齿圈
-                            c.beginPath()
-                            c.arc(width / 2, height / 2, 4.6, 0, Math.PI * 2)
-                            c.stroke()
-                            // 六个齿：以中心为准向外放射短线
-                            for (var i = 0; i < 6; i++) {
-                                var a = i * Math.PI / 3
-                                var cx = width / 2 + Math.cos(a) * 5.6
-                                var cy = height / 2 + Math.sin(a) * 5.6
-                                c.beginPath()
-                                c.moveTo(cx - Math.cos(a) * 1.6, cy - Math.sin(a) * 1.6)
-                                c.lineTo(cx + Math.cos(a) * 1.6, cy + Math.sin(a) * 1.6)
-                                c.stroke()
-                            }
-                            // 内圈
-                            c.beginPath()
-                            c.arc(width / 2, height / 2, 1.6, 0, Math.PI * 2)
-                            c.stroke()
-                        }
+                        name: "settings"
+                        tint: settingsHover.hovered ? theme.textPrimary : theme.textSecondary
                     }
                     HoverHandler { id: settingsHover; cursorShape: Qt.PointingHandCursor }
                     TapHandler { onTapped: root.openSettings() }
@@ -260,20 +228,10 @@ Rectangle {
                     radius: theme.radiusSm
                     color: minHover.hovered ? theme.surfaceHover : "transparent"
                     anchors.verticalCenter: parent.verticalCenter
-                    Canvas {
+                    AppIcon {
                         width: 14; height: 14
                         anchors.centerIn: parent
-                        onPaint: {
-                            var c = getContext("2d")
-                            c.clearRect(0, 0, width, height)
-                            c.strokeStyle = theme.textSecondary
-                            c.lineWidth = 1.4
-                            c.lineCap = "round"
-                            c.beginPath()
-                            c.moveTo(2, height / 2)
-                            c.lineTo(width - 2, height / 2)
-                            c.stroke()
-                        }
+                        name: "minimize"
                     }
                     HoverHandler { id: minHover; cursorShape: Qt.PointingHandCursor }
                     TapHandler { onTapped: windowCtl.minimize() }
@@ -286,16 +244,10 @@ Rectangle {
                     radius: theme.radiusSm
                     color: maxHover.hovered ? theme.surfaceHover : "transparent"
                     anchors.verticalCenter: parent.verticalCenter
-                    Canvas {
+                    AppIcon {
                         width: 14; height: 14
                         anchors.centerIn: parent
-                        onPaint: {
-                            var c = getContext("2d")
-                            c.clearRect(0, 0, width, height)
-                            c.strokeStyle = theme.textSecondary
-                            c.lineWidth = 1.4
-                            c.strokeRect(2, 2, width - 4, height - 4)
-                        }
+                        name: "maximize"
                     }
                     HoverHandler { id: maxHover; cursorShape: Qt.PointingHandCursor }
                     TapHandler { onTapped: windowCtl.toggleMaximize() }
@@ -308,22 +260,11 @@ Rectangle {
                     radius: theme.radiusSm
                     color: closeHover.hovered ? "#DC2626" : "transparent"
                     anchors.verticalCenter: parent.verticalCenter
-                    Canvas {
+                    AppIcon {
                         width: 14; height: 14
                         anchors.centerIn: parent
-                        onPaint: {
-                            var c = getContext("2d")
-                            c.clearRect(0, 0, width, height)
-                            c.strokeStyle = closeHover.hovered ? theme.textInverse : theme.textSecondary
-                            c.lineWidth = 1.4
-                            c.lineCap = "round"
-                            c.beginPath()
-                            c.moveTo(2.5, 2.5)
-                            c.lineTo(width - 2.5, height - 2.5)
-                            c.moveTo(width - 2.5, 2.5)
-                            c.lineTo(2.5, height - 2.5)
-                            c.stroke()
-                        }
+                        name: "close"
+                        tint: closeHover.hovered ? theme.textInverse : theme.textSecondary
                     }
                     HoverHandler { id: closeHover; cursorShape: Qt.PointingHandCursor }
                     TapHandler { onTapped: windowCtl.close() }
@@ -410,34 +351,10 @@ Rectangle {
                         anchors.centerIn: parent
                         spacing: theme.spaceXs
                         // 垃圾桶图标
-                        Canvas {
+                        AppIcon {
                             width: 12; height: 12
                             anchors.verticalCenter: parent.verticalCenter
-                            onPaint: {
-                                var c = getContext("2d")
-                                c.clearRect(0, 0, width, height)
-                                c.strokeStyle = theme.textSecondary
-                                c.lineWidth = 1.2
-                                // 桶身
-                                c.strokeRect(2.5, 4, 7, 6.5)
-                                // 桶盖
-                                c.beginPath()
-                                c.moveTo(1.5, 3)
-                                c.lineTo(10.5, 3)
-                                c.stroke()
-                                // 提手
-                                c.beginPath()
-                                c.moveTo(4.5, 1.5)
-                                c.lineTo(7.5, 1.5)
-                                c.stroke()
-                                // 竖纹
-                                c.beginPath()
-                                c.moveTo(5, 5.5)
-                                c.lineTo(5, 9)
-                                c.moveTo(7, 5.5)
-                                c.lineTo(7, 9)
-                                c.stroke()
-                            }
+                            name: "trash"
                         }
                         Text {
                             anchors.verticalCenter: parent.verticalCenter
@@ -470,22 +387,10 @@ Rectangle {
                         anchors.centerIn: parent
                         spacing: theme.spaceXs
                         // 时钟图标
-                        Canvas {
+                        AppIcon {
                             width: 12; height: 12
                             anchors.verticalCenter: parent.verticalCenter
-                            onPaint: {
-                                var c = getContext("2d")
-                                c.clearRect(0, 0, width, height)
-                                c.strokeStyle = theme.textSecondary
-                                c.lineWidth = 1.2
-                                c.beginPath()
-                                c.arc(width / 2, height / 2, width / 2 - 1, 0, Math.PI * 2)
-                                c.moveTo(width / 2, height / 2)
-                                c.lineTo(width / 2, height / 2 - (height / 2 - 2))
-                                c.moveTo(width / 2, height / 2)
-                                c.lineTo(width / 2 + (width / 2 - 2), height / 2 + 1)
-                                c.stroke()
-                            }
+                            name: "history"
                         }
                         Text {
                             anchors.verticalCenter: parent.verticalCenter
@@ -617,8 +522,8 @@ Rectangle {
                     id: enhanceBtn
                     objectName: "enhanceBtn"
                     Layout.alignment: Qt.AlignVCenter
-                    Layout.minimumWidth: enhanceLabel.implicitWidth + theme.spaceLg * 2
-                    width: enhanceLabel.implicitWidth + theme.spaceLg * 2
+                    Layout.minimumWidth: enhanceContent.implicitWidth + theme.spaceLg * 2
+                    width: enhanceContent.implicitWidth + theme.spaceLg * 2
                     height: 38
                     radius: theme.radiusMd
                     readonly property bool canEnhance: !preview.enhancing && sessionCtl.hasModelSelected
@@ -627,14 +532,25 @@ Rectangle {
                     color: enhanceHover.hovered && canEnhance ? theme.accentHover : theme.accent
                     Behavior on color { ColorAnimation { duration: 90 } }
                     Behavior on opacity { NumberAnimation { duration: 90 } }
-                    Text {
-                        id: enhanceLabel
+                    Row {
+                        id: enhanceContent
                         anchors.centerIn: parent
-                        text: "✨ 增强提示词"
-                        color: theme.textInverse
-                        font.family: theme.fontFamily
-                        font.pixelSize: theme.fontBody
-                        font.weight: Font.DemiBold
+                        spacing: theme.spaceSm
+                        // 品牌信号迷你版（与主图标同基因），白色描边适应实心底
+                        AppIcon {
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: 15; height: 15
+                            name: "spark"
+                            tint: theme.textInverse
+                        }
+                        Text {
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: "增强提示词"
+                            color: theme.textInverse
+                            font.family: theme.fontFamily
+                            font.pixelSize: theme.fontBody
+                            font.weight: Font.DemiBold
+                        }
                     }
                     HoverHandler {
                         id: enhanceHover
@@ -937,6 +853,34 @@ Rectangle {
                 anchors.verticalCenter: parent.verticalCenter
                 spacing: theme.spaceSm
 
+                // 记忆候选：增强成功后从用户原文抽到候选才亮起，角标显示条数。
+                // 点击打开确认弹窗——候选必须用户逐条确认才入库，控制器不擅自写。
+                AppButton {
+                    text: "记忆"
+                    variant: memoryCtl.candidates.length > 0 ? "secondary" : "ghost"
+                    enabled: memoryCtl.candidates.length > 0
+                    implicitWidth: 68
+                    implicitHeight: 32
+                    onClicked: memoryPopup.open()
+                    Rectangle {
+                        anchors.top: parent.top
+                        anchors.right: parent.right
+                        anchors.topMargin: -5
+                        anchors.rightMargin: -5
+                        width: 18; height: 18
+                        radius: 9
+                        visible: memoryCtl.candidates.length > 0
+                        color: theme.accent
+                        Text {
+                            anchors.centerIn: parent
+                            text: memoryCtl.candidates.length
+                            color: theme.textInverse
+                            font.family: theme.fontFamily
+                            font.pixelSize: theme.fontCaption
+                        }
+                    }
+                }
+
                 // 使用增强结果：把增强文本交给目标 Agent（写剪贴板，PRD 第十章
                 // Use Enhanced）。仅在增强完成且有内容时可用，避免空/未完成时误触发。
                 // 传 enhancedArea.text（结果框当前内容）而非模型值：用户手动编辑过
@@ -977,6 +921,181 @@ Rectangle {
             target: settingsLoader.item
             function onBackRequested() {
                 root.backToMain()
+            }
+        }
+    }
+
+    // ---------- 记忆候选确认弹窗 ----------
+    // 抽取到的候选必须逐条确认才写库。每条显示类型 / 内容 / 查重提示，
+    // 默认勾选，用户可取消有冲突或不想记的项。「保存选中」把勾选索引交给
+    // memoryCtl.confirm；关闭弹窗不清空候选——用户可能只是想回头再看。
+    Popup {
+        id: memoryPopup
+        objectName: "memoryPopup"
+        x: (root.width - width) / 2
+        y: (root.height - height) / 2
+        width: Math.min(root.width - 80, 520)
+        height: Math.min(root.height - 80, 460)
+        padding: theme.spaceLg
+        modal: true
+        focus: true
+        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+
+        background: Rectangle {
+            radius: theme.radiusLg
+            color: theme.surface
+            border.width: 1
+            border.color: theme.border
+        }
+
+        contentItem: ColumnLayout {
+            spacing: theme.spaceMd
+
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: theme.spaceSm
+                Text {
+                    Layout.fillWidth: true
+                    text: "本次识别到 " + memoryCtl.candidates.length + " 条可记忆内容"
+                    color: theme.textPrimary
+                    font.family: theme.fontFamily
+                    font.pixelSize: theme.fontSubtitle
+                    font.weight: Font.DemiBold
+                }
+                Rectangle {
+                    Layout.alignment: Qt.AlignVCenter
+                    Layout.preferredWidth: 26
+                    Layout.preferredHeight: 26
+                    radius: theme.radiusSm
+                    color: memoryCloseHover.hovered ? theme.surfaceHover : "transparent"
+                    AppIcon {
+                        width: 10; height: 10
+                        anchors.centerIn: parent
+                        name: "close"
+                        tint: memoryCloseHover.hovered ? theme.textPrimary : theme.textSecondary
+                    }
+                    HoverHandler { id: memoryCloseHover; cursorShape: Qt.PointingHandCursor }
+                    TapHandler { onTapped: memoryPopup.close() }
+                }
+            }
+
+            Text {
+                Layout.fillWidth: true
+                text: "这些是长期知识（决策、偏好、项目事实）。确认后会按当前项目保存，之后增强时自动带入。"
+                color: theme.textMuted
+                font.family: theme.fontFamily
+                font.pixelSize: theme.fontCaption
+                wrapMode: Text.WordWrap
+            }
+
+            ListView {
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                clip: true
+                model: memoryCtl.candidates
+                spacing: theme.spaceSm
+                boundsBehavior: Flickable.StopAtBounds
+
+                delegate: Rectangle {
+                    width: ListView.view.width
+                    height: contentCol.implicitHeight + theme.spaceMd * 2
+                    radius: theme.radiusMd
+                    color: theme.surfaceHover
+                    border.width: 1
+                    border.color: theme.border
+
+                    RowLayout {
+                        id: contentCol
+                        anchors.fill: parent
+                        anchors.margins: theme.spaceMd
+                        spacing: theme.spaceSm
+
+                        Rectangle {
+                            Layout.alignment: Qt.AlignTop
+                            Layout.preferredWidth: 16
+                            Layout.preferredHeight: 16
+                            radius: 3
+                            color: modelData.selected ? theme.accent : theme.surface
+                            border.width: 1
+                            border.color: theme.borderStrong
+                            Text {
+                                anchors.centerIn: parent
+                                visible: modelData.selected
+                                text: "✓"
+                                color: theme.textInverse
+                                font.family: theme.fontFamily
+                                font.pixelSize: theme.fontCaption
+                            }
+                            TapHandler { onTapped: memoryCtl.toggle(index) }
+                        }
+
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            spacing: 3
+                            RowLayout {
+                                Layout.fillWidth: true
+                                spacing: theme.spaceSm
+                                Rectangle {
+                                    Layout.alignment: Qt.AlignVCenter
+                                    radius: 4
+                                    color: theme.accentSoft
+                                    Text {
+                                        anchors.centerIn: parent
+                                        text: modelData.type
+                                        color: theme.accent
+                                        font.family: theme.fontFamily
+                                        font.pixelSize: theme.fontCaption
+                                    }
+                                    Component.onCompleted: {
+                                        width = implicitWidth + 12
+                                        height = 20
+                                    }
+                                }
+                            }
+                            Text {
+                                Layout.fillWidth: true
+                                text: modelData.content
+                                color: theme.textPrimary
+                                font.family: theme.fontFamily
+                                font.pixelSize: theme.fontBody
+                                wrapMode: Text.WordWrap
+                            }
+                            Text {
+                                Layout.fillWidth: true
+                                visible: modelData.conflicts.length > 0
+                                text: "可能与已有记忆重复：" + modelData.conflicts.join("；")
+                                color: theme.warning
+                                font.family: theme.fontFamily
+                                font.pixelSize: theme.fontCaption
+                                wrapMode: Text.WordWrap
+                            }
+                        }
+                    }
+                }
+            }
+
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: theme.spaceSm
+                Item { Layout.fillWidth: true }
+                AppButton {
+                    text: "取消"
+                    implicitHeight: 32
+                    onClicked: memoryPopup.close()
+                }
+                AppButton {
+                    text: "保存选中"
+                    variant: "primary"
+                    implicitHeight: 32
+                    onClicked: {
+                        var chosen = []
+                        for (var i = 0; i < memoryCtl.candidates.length; ++i) {
+                            if (memoryCtl.candidates[i].selected) chosen.push(i)
+                        }
+                        memoryCtl.confirm(chosen)
+                        memoryPopup.close()
+                    }
+                }
             }
         }
     }
@@ -1032,22 +1151,12 @@ Rectangle {
                     Layout.preferredHeight: 26
                     radius: theme.radiusSm
                     color: closePopHover.hovered ? theme.surfaceHover : "transparent"
-                    // 叉号用 Canvas 画：字体符号在缺字时会渲染成方块
-                    Canvas {
+                    // 叉号用图标族绘制：字体符号在缺字时会渲染成方块
+                    AppIcon {
                         width: 10; height: 10
                         anchors.centerIn: parent
-                        onPaint: {
-                            var c = getContext("2d")
-                            c.clearRect(0, 0, width, height)
-                            c.strokeStyle = closePopHover.hovered ? theme.textPrimary
-                                                                    : theme.textSecondary
-                            c.lineWidth = 1.4
-                            c.lineCap = "round"
-                            c.beginPath()
-                            c.moveTo(1, 1); c.lineTo(width - 1, height - 1)
-                            c.moveTo(width - 1, 1); c.lineTo(1, height - 1)
-                            c.stroke()
-                        }
+                        name: "close"
+                        tint: closePopHover.hovered ? theme.textPrimary : theme.textSecondary
                     }
                     HoverHandler { id: closePopHover; cursorShape: Qt.PointingHandCursor }
                     TapHandler { onTapped: historyPopup.close() }
@@ -1149,7 +1258,7 @@ Rectangle {
                                 elide: Text.ElideRight
                                 visible: !item.expanded
                             }
-                            // 「收起」提示：文本 + Canvas 三角（不依赖字体符号）。
+                            // 「收起」提示：文本 + 图标族三角（不依赖字体符号）。
                             // 展开态下这里是唯一的收起入口，故自己带 hover 光标。
                             Row {
                                 id: collapseHint
@@ -1169,22 +1278,11 @@ Rectangle {
                                 TapHandler {
                                     onTapped: historyPanel.expandedKey = -1
                                 }
-                                Canvas {
+                                AppIcon {
                                     width: 8; height: 8
                                     anchors.verticalCenter: parent.verticalCenter
-                                    onPaint: {
-                                        var c = getContext("2d")
-                                        c.clearRect(0, 0, width, height)
-                                        c.strokeStyle = theme.textMuted
-                                        c.lineWidth = 1.2
-                                        c.lineCap = "round"
-                                        c.lineJoin = "round"
-                                        c.beginPath()
-                                        c.moveTo(1, height * 0.62)
-                                        c.lineTo(width / 2, height * 0.32)
-                                        c.lineTo(width - 1, height * 0.62)
-                                        c.stroke()
-                                    }
+                                    name: "chevronUp"
+                                    tint: theme.textMuted
                                 }
                             }
                         }

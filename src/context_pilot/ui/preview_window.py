@@ -18,6 +18,8 @@ from PySide6.QtQuick import QQuickView
 
 from context_pilot.ui import qml_setup
 from context_pilot.ui.icon import app_icon
+from context_pilot.ui.memory_controller import MemoryController
+from context_pilot.ui.memory_manage_controller import MemoryManageController
 from context_pilot.ui.preview_model import PreviewModel
 from context_pilot.ui.session_controller import SessionController
 from context_pilot.ui.settings_controller import SettingsController
@@ -105,6 +107,8 @@ class PreviewWindow:
         model: PreviewModel,
         settings: SettingsModel | None = None,
         session: SessionController | None = None,
+        memory: MemoryController | None = None,
+        memory_manage: MemoryManageController | None = None,
         base_dir: Path | None = None,
         on_close: Callable[[], None] | None = None,
     ) -> None:
@@ -146,6 +150,14 @@ class PreviewWindow:
         self._view.rootContext().setContextProperty("settingsCtl", self._settings_ctl)
         self._view.rootContext().setContextProperty("sessionCtl", self._session_ctl)
         self._view.rootContext().setContextProperty("shortcut_ctl", self._shortcut_ctl)
+        # 记忆候选：无外部注入时建一个空控制器，QML 侧的按钮据候选数显示角标
+        self._memory_ctl = memory or MemoryController(base_dir=base_dir)
+        self._view.rootContext().setContextProperty("memoryCtl", self._memory_ctl)
+        # 记忆管理（设置页）：与候选控制器分开，按当前项目初始化
+        self._memory_manage_ctl = memory_manage or MemoryManageController(
+            self._session_ctl.current_project_root, base_dir=base_dir
+        )
+        self._view.rootContext().setContextProperty("memoryManageCtl", self._memory_manage_ctl)
         self._view.setSource(qml_setup.source("PreviewWindow.qml"))
         qml_setup.check(self._view, "预览窗")
 
@@ -161,6 +173,14 @@ class PreviewWindow:
     @property
     def shortcut_ctl(self) -> ShortcutController:
         return self._shortcut_ctl
+
+    @property
+    def memory_ctl(self) -> MemoryController:
+        return self._memory_ctl
+
+    @property
+    def memory_manage_ctl(self) -> MemoryManageController:
+        return self._memory_manage_ctl
 
     def _set_root_flag(self, name: str, value: bool) -> None:
         """写 QML 根对象属性（整体 bool 状态位），比 invokeMethod 更省一层包装。"""

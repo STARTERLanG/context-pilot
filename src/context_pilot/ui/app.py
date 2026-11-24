@@ -17,6 +17,7 @@ from context_pilot.core.models import EnhanceOptions
 from context_pilot.core.pipeline import Pipeline
 from context_pilot.memory.retriever import MemoryRetriever
 from context_pilot.memory.store import MemoryStore
+from context_pilot.ui.memory_manage_controller import MemoryManageController
 from context_pilot.optimizer.openai_provider import OpenAiProvider
 from context_pilot.optimizer.provider import LlmProvider
 from context_pilot.platform.clipboard import write_clipboard_text
@@ -30,6 +31,7 @@ from context_pilot.platform.single_instance import SingleInstance
 from context_pilot.shortcuts import HotkeyRegistrationError, ShortcutManager
 from context_pilot.retrieval.base import Retriever
 from context_pilot.ui.icon import app_icon
+from context_pilot.ui.memory_controller import MemoryController
 from context_pilot.ui.preview_model import PreviewModel
 from context_pilot.ui.preview_window import PreviewWindow
 from context_pilot.ui.settings_model import SettingsModel
@@ -77,10 +79,22 @@ def _build_retrievers(config: Config, project_root: Path) -> list[Retriever]:
     retrievers: list[Retriever] = []
     if config.memory.enabled:
         try:
-            retrievers.append(MemoryRetriever(MemoryStore(project_root)))
+            # 项目库 + 全局库一起检索：全局记忆（跨项目的偏好/约定）对所有
+            # 项目生效；任一库打不开时仍用能打开的那个，不让主流程失败。
+            project_store = MemoryStore(project_root)
+            try:
+                global_store = MemoryStore("", scope="global")
+            except OSError:
+                global_store = None
+            retrievers.append(
+                MemoryRetriever(project_store, global_store=global_store)
+            )
         except OSError:
-            # 记忆库不可用不应阻断主流程
-            pass
+            # 项目记忆库不可用时，仍尝试只用全局库
+            try:
+                retrievers.append(MemoryRetriever(MemoryStore("", scope="global")))
+            except OSError:
+                pass
     return retrievers
 
 
@@ -89,11 +103,33 @@ def _build_adapter(config: Config) -> AgentAdapter:
     return agents.get(config.general.agent, claude)()
 
 
+def _set_app_user_model_id(log) -> None:
+    """让 Windows 把这个进程认作独立应用，而不是「python.exe」。
+
+    Windows 任务栏按 AppUserModelID 归组并取图标：用 python.exe 启动时，
+    进程身份默认是 Python，任务栏显示 Python 图标，setWindowIcon 盖不住。
+    显式声明身份后任务栏改用窗口图标（设置失败也不阻断启动，只是回退到旧行为）。
+    """
+    if sys.platform != "win32":
+        return
+    try:
+        import ctypes
+
+        api = ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID
+        api.argtypes = (ctypes.c_wchar_p,)
+        api("ContextPilot.ContextPilot")
+    except (AttributeError, OSError) as exc:
+        log.debug("设置 AppUserModelID 失败，任务栏图标可能回退到 python.exe: %s", exc)
+
+
 def main() -> int:
     # 尽早初始化日志：此后的装配、检索、增强失败都能留下现场（PRD 三十六章）。
     # 文件不可用时自动降级到 stderr，不会因此启动失败。
     setup_logging()
     log = get_logger(__name__)
+
+    # 必须在任何窗口创建前声明应用身份，否则任务栏仍按 python.exe 取图标
+    _set_app_user_model_id(log)
 
     app = QApplication(sys.argv)
     app.setApplicationName("ContextPilot")
@@ -128,11 +164,16 @@ def main() -> int:
     settings_model = SettingsModel(config=config)
     # 主页面「项目 / 模型」选择：项目只活在会话内存里，增强目标跨启动保留
     session_ctl = SessionController(config)
+    # 记忆候选控制器：按当前项目隔离记忆库；下面 rebuild_pipeline 时同步归属
+    memory_ctl = MemoryController(session_ctl.current_project_root)
+    memory_manage_ctl = MemoryManageController(session_ctl.current_project_root)
     try:
         window = PreviewWindow(
             model,
             settings=settings_model,
             session=session_ctl,
+            memory=memory_ctl,
+            memory_manage=memory_manage_ctl,
             on_close=lambda: _handle_close(state, app),
         )
     except Exception:
@@ -176,6 +217,11 @@ def main() -> int:
         # 「无项目」时 current_project_root 为空串，project_root 传 None：
         # Pipeline 据此跳过仓库扫描与检索器构建（仅保留 provider）。
         root_str = session_ctl.current_project_root
+        # 记忆库归属跟着项目走：切项目后旧候选必须失效，否则会把 A 项目的
+        # 决策写进 B 项目的库。set_project_root 内部在变化时清空候选。
+        memory_ctl.set_project_root(root_str)
+        # 设置页记忆栏跟随项目切换（全局栏不受影响）
+        memory_manage_ctl.set_project_root(root_str)
         root = Path(root_str) if root_str else None
         try:
             state["pipeline"] = Pipeline(
@@ -274,6 +320,9 @@ def main() -> int:
 
             # 2) 解析默认模型（独立于主窗口选择），构建独立 pipeline
             pipeline = _build_hotkey_pipeline(state["config"])
+            # 热键默认项目独立于主窗口选择：记忆也要归到这个项目，
+            # 不能因为主窗口此刻停在别的项目就把候选写错库。
+            hotkey_root = session_ctl.project_root_by_id(hk.default_project_id)
             if pipeline is None:
                 log.warning("无可用默认模型，中止增强")
                 toast("无可用模型", "请到设置页勾选已生效模型并指定默认模型", kind="warning")
@@ -284,6 +333,10 @@ def main() -> int:
 
             def _write_back(result) -> None:
                 log.info("增强成功，结果长度=%d", len(result.enhanced_prompt))
+                # 从用户原文抽取候选（不是增强后的任务书），归到热键默认项目。
+                # 热键路径不弹窗打断：候选留给预览窗的「记忆」角标，由用户主动确认。
+                memory_ctl.set_project_root(hotkey_root)
+                memory_ctl.collect(result.original_prompt)
                 if auto_paste:
                     # 自动粘贴：切前台 + 还焦点 + Ctrl+V，回写覆盖已全选的原文
                     ok = write_and_paste(hwnd, result.enhanced_prompt, focus)
@@ -311,7 +364,7 @@ def main() -> int:
                 on_failure=_on_failed,
                 pipeline=pipeline,
                 style=hk.default_style,
-                include_context=bool(session_ctl.project_root_by_id(hk.default_project_id)),
+                include_context=bool(hotkey_root),
             )
 
         def _grab() -> None:
@@ -365,7 +418,13 @@ def main() -> int:
         worker.start()
 
     def on_enhance_requested(text: str) -> None:
-        _run_enhance(text, on_success=model.set_result, on_failure=model.set_failed)
+        def _success(result) -> None:
+            model.set_result(result)
+            # 用回传的 original_prompt（即本次真正提交的原文）抽候选，归到
+            # 主窗口当前项目；切项目时 set_project_root 已先清过旧候选。
+            memory_ctl.collect(result.original_prompt)
+
+        _run_enhance(text, on_success=_success, on_failure=model.set_failed)
 
     def on_use(text: str) -> None:
         if state["config"].behavior.auto_copy:

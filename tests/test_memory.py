@@ -47,6 +47,17 @@ def test_different_projects_use_different_db(tmp_path):
     assert project_hash(tmp_path / "a") != project_hash(tmp_path / "b")
 
 
+def test_retriever_matches_chinese_memory(tmp_path):
+    """记忆多为中文；查询也纯中文时必须能命中（ASCII 分词对此完全失效）。"""
+    store = _store(tmp_path)
+    store.add("不要直连数据库，统一走 Repository")
+
+    results = MemoryRetriever(store).search("要不要直连数据库", ProjectContext(root=tmp_path))
+
+    assert results
+    assert any("数据库" in item.content for item in results)
+
+
 def test_retriever_matches_memory_by_keyword(tmp_path):
     store = _store(tmp_path)
     store.add("OrderService 不得直接依赖 RefundService", MemoryType.ARCHITECTURE_DECISION)

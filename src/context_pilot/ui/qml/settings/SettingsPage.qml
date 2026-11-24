@@ -11,7 +11,7 @@ Item {
 
     // 全局热键（系统级）与窗口快捷键（窗口内）是两套东西，各自一个分类：
     // 前者注册到 OS，后者只在窗口聚焦时生效，混在一页里解释不清。
-    readonly property var tabs: ["常规", "模型配置", "项目索引", "优化模式", "全局热键", "窗口快捷键"]
+    readonly property var tabs: ["常规", "模型配置", "项目索引", "优化模式", "全局热键", "窗口快捷键", "记忆管理"]
     property int currentTab: 0
 
     // 返回主页面：由外层切换可见性；主页面期间从未被销毁，内容与状态原样回来
@@ -43,22 +43,10 @@ Item {
                     spacing: theme.spaceXs
 
                     // 左箭头
-                    Canvas {
+                    AppIcon {
                         width: 12; height: 12
                         anchors.verticalCenter: parent.verticalCenter
-                        onPaint: {
-                            var c = getContext("2d")
-                            c.clearRect(0, 0, width, height)
-                            c.strokeStyle = theme.textSecondary
-                            c.lineWidth = 1.4
-                            c.lineCap = "round"
-                            c.lineJoin = "round"
-                            c.beginPath()
-                            c.moveTo(width * 0.72, 2)
-                            c.lineTo(2, height / 2)
-                            c.lineTo(width * 0.72, height - 2)
-                            c.stroke()
-                        }
+                        name: "back"
                     }
                     Text {
                         anchors.verticalCenter: parent.verticalCenter
@@ -89,8 +77,8 @@ Item {
 
             AppSegmented {
                 Layout.alignment: Qt.AlignVCenter
-                // 六个分类：收紧段宽与间距，才放得下同行的返回按钮与标题
-                segmentMinWidth: 76
+                // 七个分类：收紧段宽与间距，才放得下同行的返回按钮与标题
+                segmentMinWidth: 66
                 segmentSpacing: 2
                 options: root.tabs
                 currentIndex: root.currentTab
@@ -126,6 +114,10 @@ Item {
             SettingsShortcuts {
                 anchors.fill: parent
                 visible: root.currentTab === 5
+            }
+            SettingsMemory {
+                anchors.fill: parent
+                visible: root.currentTab === 6
             }
         }
 

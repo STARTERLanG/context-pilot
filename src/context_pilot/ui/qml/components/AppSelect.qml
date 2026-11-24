@@ -56,27 +56,15 @@ Item {
                 elide: Text.ElideRight
             }
             // 箭头：展开时转 180°，颜色同步强调色
-            Canvas {
+            AppIcon {
                 id: chevron
                 Layout.alignment: Qt.AlignVCenter
                 Layout.preferredWidth: 10
                 Layout.preferredHeight: 10
+                name: "chevron"
+                tint: popup.visible ? theme.accent : theme.textMuted
                 rotation: popup.visible ? 180 : 0
                 Behavior on rotation { NumberAnimation { duration: 120 } }
-                onRotationChanged: requestPaint()
-                onPaint: {
-                    var c = getContext("2d")
-                    c.clearRect(0, 0, width, height)
-                    c.strokeStyle = popup.visible ? theme.accent : theme.textMuted
-                    c.lineWidth = 1.4
-                    c.lineCap = "round"
-                    c.lineJoin = "round"
-                    c.beginPath()
-                    c.moveTo(1.5, height * 0.38)
-                    c.lineTo(width / 2, height * 0.68)
-                    c.lineTo(width - 1.5, height * 0.38)
-                    c.stroke()
-                }
             }
         }
 
@@ -151,25 +139,14 @@ Item {
                             font.weight: isCurrent ? Font.DemiBold : Font.Normal
                             elide: Text.ElideRight
                         }
-                        // 对勾：Canvas 绘制，不依赖字体符号
-                        Canvas {
+                        // 对勾：图标族绘制，不依赖字体符号
+                        AppIcon {
                             Layout.alignment: Qt.AlignVCenter
                             Layout.preferredWidth: 12
                             Layout.preferredHeight: 12
+                            name: "check"
+                            tint: theme.accent
                             visible: isCurrent
-                            onPaint: {
-                                var c = getContext("2d")
-                                c.clearRect(0, 0, width, height)
-                                c.strokeStyle = theme.accent
-                                c.lineWidth = 1.6
-                                c.lineCap = "round"
-                                c.lineJoin = "round"
-                                c.beginPath()
-                                c.moveTo(2, height * 0.55)
-                                c.lineTo(width * 0.42, height * 0.85)
-                                c.lineTo(width - 2, height * 0.2)
-                                c.stroke()
-                            }
                         }
                         Text {
                             Layout.alignment: Qt.AlignVCenter

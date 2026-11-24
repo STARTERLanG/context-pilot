@@ -70,8 +70,6 @@ Rectangle {
         interval: 1200
         onTriggered: root.copied = false
     }
-    onCopiedChanged: copyIcon.requestPaint()
-
     Flickable {
         id: flick
         anchors.fill: parent
@@ -132,7 +130,7 @@ Rectangle {
         }
     }
 
-    // 右上角复制按钮：沿用项目 Canvas 图标规范（12×12 描边，与时钟/垃圾桶一致），
+    // 右上角复制按钮：沿用界面图标族（24 网格等比缩放到 12px，与时钟/垃圾桶一致），
     // 颜色只取中性文字色——默认 textMuted 低对比，hover 加深到 textSecondary。
     // 右侧外移一个滚动条宽度，既不压滚动条也不压边框圆角。
     Rectangle {
@@ -163,40 +161,19 @@ Rectangle {
         Accessible.description: root.canCopy ? "复制当前文本框的全部内容"
                                              : "内容为空，暂不可复制"
 
-        Canvas {
+        // 复制 / 已复制对勾两态共用一枚图标，颜色只取中性文字色：
+        // 默认 textMuted 低对比，hover 加深到 textSecondary。
+        AppIcon {
             id: copyIcon
             width: 12; height: 12
             anchors.centerIn: parent
-            onPaint: {
-                var c = getContext("2d")
-                c.clearRect(0, 0, width, height)
-                // 中性墨色：默认低对比，hover 略微加深
-                c.strokeStyle = copyHover.hovered ? theme.textSecondary : theme.textMuted
-                c.lineWidth = 1.2
-                c.lineJoin = "round"
-                c.lineCap = "round"
-
-                if (root.copied) {
-                    // 反馈态：对勾
-                    c.beginPath()
-                    c.moveTo(2, height * 0.55)
-                    c.lineTo(width * 0.38, height * 0.82)
-                    c.lineTo(width - 2, height * 0.22)
-                    c.stroke()
-                    return
-                }
-                // 复制图标：后页（右上露出）+ 前页（填底色遮住重叠部分）
-                c.strokeRect(4.5, 1.5, 6, 6.5)
-                c.fillStyle = copyBtn.color
-                c.fillRect(1.5, 3.5, 7, 7)
-                c.strokeRect(1.5, 3.5, 7, 7)
-            }
+            name: root.copied ? "check" : "copy"
+            tint: copyHover.hovered ? theme.textSecondary : theme.textMuted
         }
 
         HoverHandler {
             id: copyHover
             cursorShape: Qt.PointingHandCursor
-            onHoveredChanged: copyIcon.requestPaint()
         }
         TapHandler { onTapped: root.triggerCopy() }
     }
