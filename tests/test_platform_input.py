@@ -5,6 +5,10 @@
 底层真实 Win32 调用不在此覆盖（需真实桌面环境）。
 """
 
+import sys
+
+import pytest
+
 from context_pilot.platform import input as input_mod
 
 
@@ -52,6 +56,10 @@ def test_focused_control_none_on_non_windows(monkeypatch):
     assert input_mod.focused_control() is None
 
 
+@pytest.mark.skipif(
+    sys.platform != "win32",
+    reason="Win32 结构体布局仅在 Windows 有意义，ctypes 在其他平台按本地 ABI 对齐",
+)
 def test_input_struct_size_matches_win32_layout():
     """`_INPUT` 的尺寸必须与系统一致，否则 SendInput 全部失效。
 
